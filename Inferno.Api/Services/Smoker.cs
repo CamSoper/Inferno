@@ -178,6 +178,7 @@ namespace Inferno.Api.Services
                 await Task.Delay(TimeSpan.FromSeconds(1));
             }
         } 
+        
         private async Task Smoke()
         {
             _blower.On();
