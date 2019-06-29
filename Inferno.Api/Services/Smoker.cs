@@ -18,13 +18,16 @@ namespace Inferno.Api.Services
 
         int _maxSetPoint = 450;
         int _minSetPoint = 180;
-        int _ignitionTemp = 140;
+        int _ignitionTemp = 145;
         int _shutdownBlowerTime = 10;
+        int _igniterTimeout = 10;
+        DateTime _igniterOnTime;
 
         CancellationTokenSource _cts;
         
         Task _modeTask;
         Task _displayTask;
+        Task _igniterTask;
 
         public Smoker(IAuger auger, 
                         IBlower blower, 
@@ -46,6 +49,7 @@ namespace Inferno.Api.Services
 
             _displayTask = UpdateDisplay();
             _modeTask = DoMode();
+            _igniterTask = WatchIgniter();
         }
 
         public SmokerMode Mode => _mode;
@@ -148,18 +152,36 @@ namespace Inferno.Api.Services
             }
         }
 
+        private async Task WatchIgniter()
+        {
+            Debug.WriteLine("Starting Igniter watcher thread.");
+            while (true)
+            {
+                if((_mode == SmokerMode.Smoke ||
+                    _mode == SmokerMode.Hold) &&
+                    _tempArray.GrillTemp < _ignitionTemp)
+                {
+                    _igniter.On();
+                    _igniterOnTime = DateTime.Now;
+                }
+                else
+                {
+                    _igniter.Off();
+                }
+
+                if (_igniter.IsOn && DateTime.Now - _igniterOnTime > TimeSpan.FromMinutes(_igniterTimeout))
+                {
+                    Debug.WriteLine("Igniter timeout. Setting error mode.");
+                    _igniter.Off();
+                    SetMode(SmokerMode.Error);
+                }
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            }
+        } 
         private async Task Smoke()
         {
             _blower.On();
-            if(_tempArray.GrillTemp < _ignitionTemp)
-            {
-                _igniter.On();
-            }
-            else
-            {
-                _igniter.Off();
-            }
-            
+        
             await _auger.Run(TimeSpan.FromSeconds(15), _cts.Token);
             if(!_cts.IsCancellationRequested)
             {
