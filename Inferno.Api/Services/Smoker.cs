@@ -110,7 +110,7 @@ namespace Inferno.Api.Services
                         break;
 
                     case SmokerMode.Error:
-                        _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, $"Shutting Down/Error");
+                        _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, $"Error-Clear fire pot");
                         break;
                 }
 
@@ -190,6 +190,11 @@ namespace Inferno.Api.Services
             try
             {
                 await Task.Delay(TimeSpan.FromMinutes(_shutdownBlowerTime), _cts.Token);
+                if(_mode == SmokerMode.Error)
+                {
+                    _blower.Off();
+                    await Task.Delay(TimeSpan.FromMilliseconds(-1), _cts.Token);
+                }
                 SetMode(SmokerMode.Standby);
             }
             catch(TaskCanceledException ex)
