@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 using Inferno.Api.Models;
@@ -20,6 +21,8 @@ namespace Inferno.Api.Services
         int _ignitionTemp = 140;
         int _shutdownBlowerTime = 10;
 
+        CancellationTokenSource _cts;
+        
         Task _modeTask;
         Task _displayTask;
 
@@ -39,16 +42,15 @@ namespace Inferno.Api.Services
             SetPoint = _minSetPoint;
             PValue = 2;
 
+            CancellationTokenSource _cts = new CancellationTokenSource();
+
             _displayTask = UpdateDisplay();
             _modeTask = DoMode();
         }
 
         public SmokerMode Mode => _mode;
-
-
         public int SetPoint { get; set; }
         public int PValue { get; set; }
-
         public Temps Temps => new Temps(){ GrillTemp = _tempArray.GrillTemp,
                                             ProbeTemp = Double.IsNaN(_tempArray.ProbeTemp) ? -1 : _tempArray.ProbeTemp };
         
@@ -74,7 +76,10 @@ namespace Inferno.Api.Services
             }
 
             _mode = mode;
-
+            if (_cts != null && !_cts.IsCancellationRequested)
+            {
+                _cts.Cancel();
+            }
             return true;
         }
 
@@ -118,24 +123,27 @@ namespace Inferno.Api.Services
             Debug.WriteLine("Starting mode thread.");
             while(true)
             {
-                switch (_mode)
+                using(_cts = new CancellationTokenSource())
                 {
-                    case SmokerMode.Error:
-                    case SmokerMode.Shutdown:
-                        await Shutdown();
-                        break;
+                    switch (_mode)
+                    {
+                        case SmokerMode.Error:
+                        case SmokerMode.Shutdown:
+                            await Shutdown();
+                            break;
 
-                    case SmokerMode.Hold:
-                        await Hold();
-                        break;
+                        case SmokerMode.Hold:
+                            await Hold();
+                            break;
 
-                    case SmokerMode.Smoke:
-                        await Smoke();
-                        break;
+                        case SmokerMode.Smoke:
+                            await Smoke();
+                            break;
 
-                    case SmokerMode.Standby:
-                        await Standby();          
-                        break;
+                        case SmokerMode.Standby:
+                            await Standby();          
+                            break;
+                    }
                 }
             }
         }
@@ -152,25 +160,42 @@ namespace Inferno.Api.Services
                 _igniter.Off();
             }
             
-            await _auger. Run(TimeSpan.FromSeconds(15));
-            if(_mode == SmokerMode.Smoke)
+            await _auger.Run(TimeSpan.FromSeconds(15), _cts.Token);
+            if(!_cts.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromSeconds(45 + (10 * PValue)));
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(45 + (10 * PValue)), _cts.Token);
+                }
+                catch(TaskCanceledException ex)
+                {
+                    Debug.WriteLine($"{ex} Smoke mode cancelled while waiting.");
+                }
+            }
+            else
+            {
+                Debug.WriteLine("Smoke mode cancelled while auger was running.");
             }         
         }
 
         private async Task Hold()
         {
-            _blower.On();
-            await Task.Delay(TimeSpan.FromSeconds(5));
+            throw new NotImplementedException();
         }
 
         private async Task Shutdown()
         {
             _blower.On();
             _igniter.Off();
-            await Task.Delay(TimeSpan.FromMinutes(_shutdownBlowerTime));
-            SetMode(SmokerMode.Standby);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMinutes(_shutdownBlowerTime), _cts.Token);
+                SetMode(SmokerMode.Standby);
+            }
+            catch(TaskCanceledException ex)
+            {
+                Debug.WriteLine($"{ex} Shutdown mode cancelled.");
+            }
         }
 
         private async Task Standby()

@@ -17,7 +17,7 @@
                 "pipeCwd": "${workspaceFolder}",
                 "pipeProgram": "ssh",
                 "pipeArgs": [
-                    "root@inferno"
+                    "pi@inferno"
                 ],
                 "debuggerPath": "/home/pi/vsdbg/vsdbg"
             }

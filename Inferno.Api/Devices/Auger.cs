@@ -1,6 +1,7 @@
 using System;
 using System.Device.Gpio;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 
@@ -20,14 +21,25 @@ namespace Inferno.Api.Devices
             _gpio.Write(_pin, 1);
         }
 
-        public async Task Run(TimeSpan RunTime)
+        public async Task Run(TimeSpan RunTime, CancellationToken token)
         {
             Debug.WriteLine($"Auger running: {RunTime.Seconds} seconds.");
 
             // Run the auger
             _gpio.Write(_pin, 0);
-            await Task.Delay(RunTime);
+            Debug.WriteLine("Auger ON.");
+
+            try
+            {
+                await Task.Delay(RunTime, token);
+            }
+            catch(TaskCanceledException ex)
+            {
+                Debug.WriteLine($"{ex} Running auger cancelled.");
+            }
+
             _gpio.Write(_pin, 1);
+            Debug.WriteLine("Auger OFF.");
         }
 
         #region IDisposable Support

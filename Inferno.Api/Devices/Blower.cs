@@ -26,22 +26,23 @@ namespace Inferno.Api.Devices
         public bool IsOn => _isOn;
         public void On()
         {
+            _gpio.Write(_pin, 0);
+
             if (!_isOn)
             {
-                Debug.WriteLine("Turning Blower ON");
+                Debug.WriteLine("Blower ON.");
             }
-            _gpio.Write(_pin, 0);
             _isOn = true;
         }
 
         public void Off()
         {
+            _gpio.Write(_pin, 1);
+            
             if (_isOn)
             {
-                Debug.WriteLine("Turning Blower OFF");
+                Debug.WriteLine("Blower OFF.");
             }
-            
-            _gpio.Write(_pin, 1);
             _isOn = false;
         }
 

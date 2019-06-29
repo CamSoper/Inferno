@@ -26,21 +26,23 @@ namespace Inferno.Api.Devices
         
         public void On()
         {
+            _gpio.Write(_pin, 0);
+
             if (!_isOn)
             {
-                Debug.WriteLine("Turning hot rod ON");
+                Debug.WriteLine("Igniter ON.");
             }
-            _gpio.Write(_pin, 0);
             _isOn = true;
         }
 
         public void Off()
         {
+            _gpio.Write(_pin, 1);
+
             if (_isOn)
             {
-                Debug.WriteLine("Turning hot rod OFF");
+                Debug.WriteLine("Igniter OFF.");
             }
-            _gpio.Write(_pin, 1);
             _isOn = false;
         }
 
