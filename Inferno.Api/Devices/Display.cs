@@ -19,7 +19,7 @@ namespace Inferno.Api.Devices
             _lcd = new Lcd2004(registerSelectPin: 0, enablePin: 2, dataPins: new int[] { 4, 5, 6, 7 }, backlightPin: 3, backlightBrightness: 0.1f, readWritePin: 1, controller: _mcp); 
         }
 
-        public void DisplayInfo(double grillTemp, double probeTemp, string status, bool isIgniterOn = false)
+        public void DisplayInfo(double grillTemp, double probeTemp, string mode, string hardwareStatus)
         {
             string grillLabel = "Grill";
             string probeLabel = "Probe";
@@ -33,14 +33,7 @@ namespace Inferno.Api.Devices
             _lcd.SetCursorPosition(0, 2);
             _lcd.Write(new string('-', 20));
             _lcd.SetCursorPosition(0, 3);
-            if (isIgniterOn)
-            {
-                _lcd.Write(JustifyWithSpaces(status, "Ignite"));
-            }
-            else
-            {
-                _lcd.Write(status.PadRight(20));
-            }
+            _lcd.Write(JustifyWithSpaces(mode, hardwareStatus));
         }
 
         public void DisplayText(string line1 = "", string line2 = "", string line3 = "", string line4 = "")

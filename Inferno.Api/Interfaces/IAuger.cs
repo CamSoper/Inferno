@@ -6,6 +6,7 @@ namespace Inferno.Api.Interfaces
 {
     public interface IAuger
     {
-         Task Run(TimeSpan RunTime, CancellationToken token);
+        Task Run(TimeSpan RunTime, CancellationToken token);
+        bool IsOn { get; }
     }
 }

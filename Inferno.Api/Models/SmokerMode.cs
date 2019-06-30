@@ -2,8 +2,9 @@ namespace Inferno.Api.Models
 {
     public enum SmokerMode
     {
-        Standby,
+        Ready,
         Smoke,
+        Preheat,
         Hold,
         Shutdown, 
         Error

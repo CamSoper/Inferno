@@ -11,6 +11,9 @@ namespace Inferno.Api.Devices
     {
         GpioController _gpio;
         int _pin;
+        bool _isOn;
+
+        public bool IsOn => _isOn;
         public Auger(GpioController gpio, int pin)
         {
             _gpio = gpio;
@@ -19,6 +22,7 @@ namespace Inferno.Api.Devices
             // Open the pin and pull it high so auger is off
             _gpio.OpenPin(_pin, PinMode.Output);
             _gpio.Write(_pin, 1);
+            _isOn = false;
         }
 
         public async Task Run(TimeSpan RunTime, CancellationToken token)
@@ -27,6 +31,7 @@ namespace Inferno.Api.Devices
 
             // Run the auger
             _gpio.Write(_pin, 0);
+            _isOn = true;
             Debug.WriteLine("Auger ON.");
 
             try
@@ -39,6 +44,7 @@ namespace Inferno.Api.Devices
             }
 
             _gpio.Write(_pin, 1);
+            _isOn = false;
             Debug.WriteLine("Auger OFF.");
         }
 

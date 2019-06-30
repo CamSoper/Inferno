@@ -34,7 +34,7 @@ namespace Inferno.Api.Controllers
                 bool success = _smoker.SetMode(newMode);
                 if (!success)
                 {
-                    return Forbid();
+                    return StatusCode(403);
                 }
                 return Accepted();
             }
