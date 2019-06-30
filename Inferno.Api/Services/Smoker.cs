@@ -205,7 +205,7 @@ namespace Inferno.Api.Services
                 await _auger.Run(TimeSpan.FromSeconds(10), _cts.Token);
                 if (_cts.IsCancellationRequested)
                 {
-                    Debug.WriteLine("Hold mode cancelled while auger was running.");
+                    Debug.WriteLine("Preheat mode cancelled while auger was running.");
                 }
             }
             else
@@ -244,20 +244,6 @@ namespace Inferno.Api.Services
                     SetMode(SmokerMode.Error);
                 }
                 await Task.Delay(TimeSpan.FromSeconds(1));
-            }
-        }
-
-        private bool IsCookingMode(SmokerMode mode)
-        {
-            if ((_mode == SmokerMode.Smoke ||
-                _mode == SmokerMode.Hold ||
-                _mode == SmokerMode.Preheat))
-            {
-                return true;
-            }
-            else
-            {
-                return false;
             }
         }
 
@@ -351,9 +337,6 @@ namespace Inferno.Api.Services
 
         private double NormalizeU(double u)
         {
-            u = Math.Max(u, _uMin);
-            u = Math.Min(u, _uMax);
-
             if (_tempArray.GrillTemp >= SetPoint)
             {
                 return _uMin;
@@ -367,7 +350,23 @@ namespace Inferno.Api.Services
                 }
             }
 
+            u = Math.Max(u, _uMin);
+            u = Math.Min(u, _uMax);
             return u;
+        }
+
+        private bool IsCookingMode(SmokerMode mode)
+        {
+            if ((_mode == SmokerMode.Smoke ||
+                _mode == SmokerMode.Hold ||
+                _mode == SmokerMode.Preheat))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
     }
