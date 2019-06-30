@@ -413,14 +413,6 @@ namespace Inferno.Api.Services
                 return _uMin;
             }
 
-            if (_rtdArray.GrillTemp >= SetPoint - 5)
-            {
-                if (u >= 0.5 * _uMax)
-                {
-                    return 0.5 * _uMax;
-                }
-            }
-
             u = Math.Max(u, _uMin);
             u = Math.Min(u, _uMax);
             return u;
