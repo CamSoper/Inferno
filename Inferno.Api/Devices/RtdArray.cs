@@ -8,7 +8,7 @@ using System.Linq;
 
 namespace Inferno.Api.Devices
 {
-    public class TempArray : ITempArray, IDisposable
+    public class RtdArray : IRtdArray, IDisposable
     {
         Mcp3008 _adc;
         ConcurrentQueue<double> _grillResistances;
@@ -16,7 +16,7 @@ namespace Inferno.Api.Devices
 
         Task _adcReadTask;
 
-        public TempArray(UnixSpiDevice spi)
+        public RtdArray(UnixSpiDevice spi)
         {
             _adc = new Mcp3008(spi);
             _grillResistances = new ConcurrentQueue<double>();

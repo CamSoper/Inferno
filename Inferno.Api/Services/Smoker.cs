@@ -14,7 +14,7 @@ namespace Inferno.Api.Services
         IAuger _auger;
         IBlower _blower;
         IIgniter _igniter;
-        ITempArray _tempArray;
+        IRtdArray _rtdArray;
         IDisplay _display;
 
         int _maxSetPoint = 450;
@@ -46,13 +46,13 @@ namespace Inferno.Api.Services
         public Smoker(IAuger auger,
                         IBlower blower,
                         IIgniter igniter,
-                        ITempArray tempArray,
+                        IRtdArray rtdArray,
                         IDisplay display)
         {
             _auger = auger;
             _blower = blower;
             _igniter = igniter;
-            _tempArray = tempArray;
+            _rtdArray = rtdArray;
             _display = display;
 
             _mode = SmokerMode.Ready;
@@ -73,8 +73,8 @@ namespace Inferno.Api.Services
         public int PValue { get; set; }
         public Temps Temps => new Temps()
         {
-            GrillTemp = _tempArray.GrillTemp,
-            ProbeTemp = Double.IsNaN(_tempArray.ProbeTemp) ? -1 : _tempArray.ProbeTemp
+            GrillTemp = _rtdArray.GrillTemp,
+            ProbeTemp = Double.IsNaN(_rtdArray.ProbeTemp) ? -1 : _rtdArray.ProbeTemp
         };
 
         public SmokerStatus Status => new SmokerStatus()
@@ -144,23 +144,23 @@ namespace Inferno.Api.Services
                             break;
 
                         case SmokerMode.Shutdown:
-                            _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, "Shutting Down", HardwareStatus());
+                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, "Shutting Down", HardwareStatus());
                             break;
 
                         case SmokerMode.Hold:
-                            _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, $"Hold {SetPoint}*F", HardwareStatus());
+                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Hold {SetPoint}*F", HardwareStatus());
                             break;
 
                         case SmokerMode.Preheat:
-                            _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, $"Preheat {SetPoint}*F", HardwareStatus());
+                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Preheat {SetPoint}*F", HardwareStatus());
                             break;
 
                         case SmokerMode.Smoke:
-                            _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, $"Smoke P-{PValue}", HardwareStatus());
+                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Smoke P-{PValue}", HardwareStatus());
                             break;
 
                         case SmokerMode.Error:
-                            _display.DisplayInfo(_tempArray.GrillTemp, _tempArray.ProbeTemp, $"Error:Clear fire pot", "");
+                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Error:Clear fire pot", "");
                             break;
                     }
 
@@ -239,7 +239,7 @@ namespace Inferno.Api.Services
                 return;
             }
 
-            if (_tempArray.GrillTemp < SetPoint - 10)
+            if (_rtdArray.GrillTemp < SetPoint - 10)
             {
                 await _auger.Run(TimeSpan.FromSeconds(10), _cts.Token);
                 if (_cts.IsCancellationRequested)
@@ -261,14 +261,14 @@ namespace Inferno.Api.Services
                 try
                 {
                     if (IsCookingMode(_mode) &&
-                        _tempArray.GrillTemp < _ignitionTemp &&
+                        _rtdArray.GrillTemp < _ignitionTemp &&
                         !_fireStarted)
                     {
                         _igniter.On();
                         _igniterOnTime = DateTime.Now;
                     }
                     else if (IsCookingMode(_mode) &&
-                        _tempArray.GrillTemp >= _ignitionTemp)
+                        _rtdArray.GrillTemp >= _ignitionTemp)
                     {
                         _fireStarted = true;
                         _igniter.Off();
@@ -287,12 +287,12 @@ namespace Inferno.Api.Services
                         SetMode(SmokerMode.Error);
                     }
 
-                    if (_fireStarted && _tempArray.GrillTemp < _ignitionTemp && !_fireCheck)
+                    if (_fireStarted && _rtdArray.GrillTemp < _ignitionTemp && !_fireCheck)
                     {
                         _fireCheck = true;
                         _fireCheckTime = DateTime.Now;
                     }
-                    else if(_fireCheck && _tempArray.GrillTemp >= _ignitionTemp)
+                    else if(_fireCheck && _rtdArray.GrillTemp >= _ignitionTemp)
                     {
                         _fireCheck = false;
                     }
@@ -355,7 +355,7 @@ namespace Inferno.Api.Services
                 _pid.SetNewSetpoint(SetPoint);
             }
 
-            double u = NormalizeU(_pid.GetControlVariable(_tempArray.GrillTemp));
+            double u = NormalizeU(_pid.GetControlVariable(_rtdArray.GrillTemp));
             TimeSpan runTime = u * _holdCycle;
             await _auger.Run(runTime, _cts.Token);
             if (!_cts.IsCancellationRequested)
@@ -408,12 +408,12 @@ namespace Inferno.Api.Services
 
         private double NormalizeU(double u)
         {
-            if (_tempArray.GrillTemp >= SetPoint)
+            if (_rtdArray.GrillTemp >= SetPoint)
             {
                 return _uMin;
             }
 
-            if (_tempArray.GrillTemp >= SetPoint - 5)
+            if (_rtdArray.GrillTemp >= SetPoint - 5)
             {
                 if (u >= 0.5 * _uMax)
                 {
