@@ -2,9 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Inferno.Api.Calculation;
+using Inferno.Api.Extensions;
 using Inferno.Api.Interfaces;
 using Inferno.Api.Models;
+using Inferno.Api.Pid;
 
 namespace Inferno.Api.Services
 {
@@ -20,29 +21,21 @@ namespace Inferno.Api.Services
         int _setPoint;
         int _maxSetPoint = 450;
         int _minSetPoint = 180;
-        int _ignitionTemp = 140;
 
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
-        TimeSpan _igniterTimeout = TimeSpan.FromMinutes(10);
-        TimeSpan _fireTimeout = TimeSpan.FromMinutes(5);
-        DateTime _igniterOnTime;
         TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
 
         CancellationTokenSource _cts;
         SmokerPid _pid;
         DateTime _lastPidUpdate;
         DateTime _lastModeChange;
-        bool _fireCheck;
-        DateTime _fireCheckTime;
-        bool _heartbeatFlag;
-
+ 
         double _uMax = 1.0;
         double _uMin = 0.15;
 
-        bool _fireStarted;
         Task _modeLoopTask;
-        Task _displayTask;
-        Task _fireMinderTask;
+        DisplayUpdater _displayUpdater;
+        FireMinder _fireMinder;
 
         public Smoker(IAuger auger,
                         IBlower blower,
@@ -64,9 +57,9 @@ namespace Inferno.Api.Services
 
             _pid = new SmokerPid(60.0, 180.0, 45.0);
 
-            _displayTask = UpdateDisplay();
+            _displayUpdater = new DisplayUpdater(this, _display);
+            _fireMinder = new FireMinder(this, _igniter);
             _modeLoopTask = ModeLoop();
-            _fireMinderTask = FireMinder();
         }
 
         public SmokerMode Mode => _mode;
@@ -94,46 +87,41 @@ namespace Inferno.Api.Services
             BlowerOn = _blower.IsOn,
             IgniterOn = _igniter.IsOn,
             Temps = this.Temps,
-            FireHealthy = !_fireCheck,
+            FireHealthy = _fireMinder.IsFireHealthy,
             Mode = this.Mode.ToString(),
             SetPoint = _setPoint,
             ModeTime = _lastModeChange,
             CurrentTime = DateTime.Now
         };
 
-        public bool SetMode(SmokerMode mode)
+        public bool SetMode(SmokerMode newMode)
         {
-            Debug.WriteLine($"Setting mode {mode}.");
+            Debug.WriteLine($"Setting mode {newMode}.");
 
             SmokerMode currentMode = _mode;
 
-            // Must run Shutdown or Error before switching to Ready
-            if (mode == SmokerMode.Ready &&
-                currentMode != SmokerMode.Shutdown &&
-                currentMode != SmokerMode.Error)
+            if (newMode == currentMode)
+            {
+                return true;
+            }
+
+            if (newMode == SmokerMode.Ready &&
+                currentMode.IsCookingMode())
             {
                 return false;
             }
 
-            // Can't go to Shutdown from Ready
-            if (currentMode == SmokerMode.Ready &&
-                 mode == SmokerMode.Shutdown)
-            {
-                return false;
-            }
-
-            // Init _lastPidUpdate if switching to HOLD
-            if (mode == SmokerMode.Hold)
+            if (newMode == SmokerMode.Hold)
             {
                 _lastPidUpdate = DateTime.Now;
             }
 
-            if (!IsCookingMode(mode))
+            if (!newMode.IsCookingMode())
             {
                 SetPoint = _minSetPoint;
             }
 
-            _mode = mode;
+            _mode = newMode;
             _lastModeChange = DateTime.Now;
             if (_cts != null && !_cts.IsCancellationRequested)
             {
@@ -142,63 +130,9 @@ namespace Inferno.Api.Services
             return true;
         }
 
-        private async Task UpdateDisplay()
-        {
-            Debug.WriteLine("Starting display thread.");
-            while (true)
-            {
-                try
-                {
-                    switch (_mode)
-                    {
-                        case SmokerMode.Ready:
-                            _display.DisplayText(DateTime.Now.ToShortDateString().PadLeft(20),
-                                DateTime.Now.ToShortTimeString().PadLeft(20),
-                                new string('-', 20),
-                                "Ready");
-                            break;
-
-                        case SmokerMode.Shutdown:
-                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, "Shutting Down", HardwareStatus());
-                            break;
-
-                        case SmokerMode.Hold:
-                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Hold {SetPoint}*F", HardwareStatus());
-                            break;
-
-                        case SmokerMode.Preheat:
-                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Preheat {SetPoint}*F", HardwareStatus());
-                            break;
-
-                        case SmokerMode.Smoke:
-                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Smoke P-{PValue}", HardwareStatus());
-                            break;
-
-                        case SmokerMode.Error:
-                            _display.DisplayInfo(_rtdArray.GrillTemp, _rtdArray.ProbeTemp, $"Error:Clear fire pot", "");
-                            break;
-                    }
-
-                    _heartbeatFlag = !_heartbeatFlag;
-                    await Task.Delay(TimeSpan.FromSeconds(1));
-                }
-                catch (Exception ex)
-                {
-                    string errorText = $"Display exception! {ex} {ex.StackTrace}";
-                    Console.WriteLine(errorText);
-                    Debug.WriteLine(errorText);
-                }
-            }
-        }
-
-        private string HardwareStatus()
-        {
-            string igniter = (_igniter.IsOn) ? "I" : " ";
-            string auger = (_auger.IsOn) ? "A" : " ";
-            string heartbeat = (_heartbeatFlag) ? "*" : " ";
-            return $"{igniter}{auger}{heartbeat}";
-        }
-
+        ///<summary>
+        /// Main control loop.
+        ///</summary>
         private async Task ModeLoop()
         {
             Debug.WriteLine("Starting mode thread.");
@@ -243,68 +177,10 @@ namespace Inferno.Api.Services
             }
         }
 
-        private async Task FireMinder()
-        {
-            Debug.WriteLine("Starting Fire Minder thread.");
-            while (true)
-            {
-                try
-                {
-                    if (IsCookingMode(_mode) &&
-                        _rtdArray.GrillTemp < _ignitionTemp &&
-                        !_fireStarted)
-                    {
-                        _igniter.On();
-                        _igniterOnTime = DateTime.Now;
-                    }
-                    else if (IsCookingMode(_mode) &&
-                        _rtdArray.GrillTemp >= _ignitionTemp)
-                    {
-                        _fireStarted = true;
-                        _igniter.Off();
-                    }
-                    else
-                    {
-                        _igniter.Off();
-                    }
-
-                    if (_igniter.IsOn && DateTime.Now - _igniterOnTime > _igniterTimeout)
-                    {
-                        string errorText = "Igniter timeout. Setting error mode.";
-                        Debug.WriteLine(errorText);
-                        Console.WriteLine(errorText);
-                        _igniter.Off();
-                        SetMode(SmokerMode.Error);
-                    }
-
-                    if (_fireStarted && _rtdArray.GrillTemp < _ignitionTemp && !_fireCheck)
-                    {
-                        _fireCheck = true;
-                        _fireCheckTime = DateTime.Now;
-                    }
-                    else if (_fireCheck && _rtdArray.GrillTemp >= _ignitionTemp)
-                    {
-                        _fireCheck = false;
-                    }
-                    else if (_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)
-                    {
-                        string errorText = "Fire timeout. Setting error mode.";
-                        Debug.WriteLine(errorText);
-                        Console.WriteLine(errorText);
-                        SetMode(SmokerMode.Error);
-                    }
-
-                    await Task.Delay(TimeSpan.FromSeconds(1));
-                }
-                catch (Exception ex)
-                {
-                    string errorText = $"Fire Minder loop exception! {ex} {ex.StackTrace}";
-                    Console.WriteLine(errorText);
-                    Debug.WriteLine(errorText);
-                }
-            }
-        }
-
+        ///<summary>
+        /// Releases pellets at a pre-determined rate for 
+        /// low-temperature cooking with lots of smoke.
+        ///</summary>
         private async Task Smoke()
         {
             _blower.On();
@@ -327,13 +203,16 @@ namespace Inferno.Api.Services
             }
         }
 
+        ///<summary>
+        /// Steady heat driven by PID algorithm.
+        ///</summary>
         private async Task Hold()
         {
             _blower.On();
 
-            if (!_fireStarted)
+            if (!_fireMinder.IsFireStarted)
             {
-                Debug.WriteLine("Hold: Not ignited yet - Diverting to SMOKE mode.");
+                Debug.WriteLine("Hold: Not ignited yet. Diverting to SMOKE mode.");
                 await Smoke();
                 return;
             }
@@ -366,15 +245,16 @@ namespace Inferno.Api.Services
 
 
         ///<summary>
-        /// Traeger factory algorithm.
+        /// Traeger factory algorithm for cooking. 
+        /// Generally should not be used. Use Hold instead.
         ///</summary>
         private async Task Preheat()
         {
             _blower.On();
 
-            if (!_fireStarted)
+            if (!_fireMinder.IsFireStarted)
             {
-                Debug.WriteLine("Preheat: Not ignited yet - Diverting to SMOKE mode.");
+                Debug.WriteLine("Preheat: Not ignited yet. Diverting to SMOKE mode.");
                 await Smoke();
                 return;
             }
@@ -423,6 +303,9 @@ namespace Inferno.Api.Services
             }
         }
 
+        ///<summary>
+        /// Turns off everything except for the blower to allow the fire to go out.
+        ///</summary>
         private async Task Shutdown()
         {
             _blower.On();
@@ -443,29 +326,16 @@ namespace Inferno.Api.Services
             }
         }
 
+        ///<summary>
+        /// Ready to cook.
+        ///</summary>
         private async Task Ready()
         {
             _blower.Off();
             _igniter.Off();
-            _fireStarted = false;
-            _fireCheck = false;
+            _fireMinder.ResetFireStatus();
 
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
-
-        private bool IsCookingMode(SmokerMode mode)
-        {
-            if (_mode == SmokerMode.Smoke ||
-                _mode == SmokerMode.Hold ||
-                _mode == SmokerMode.Preheat)
-            {
-                return true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-
     }
 }

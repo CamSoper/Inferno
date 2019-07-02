@@ -25,9 +25,9 @@ namespace Inferno.Api.Devices
             _adcReadTask = ReadAdc();
         }
 
-        public double GrillTemp => Math.Round(TempFahrenheitFromResistance(_grillResistances.Average()), 0);
+        public double GrillTemp => Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
 
-        public double ProbeTemp => Math.Round(TempFahrenheitFromResistance(_probeResistances.Average()), 0);
+        public double ProbeTemp => Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
 
         private async Task ReadAdc()
         {
@@ -59,7 +59,7 @@ namespace Inferno.Api.Devices
             return ((3.3 * 1000) - (rtdV * 1000)) / rtdV;
         }
 
-        static double TempFahrenheitFromResistance(double Resistance)
+        static double RtdTempFahrenheitFromResistance(double Resistance)
         {
             double A = 3.90830e-3; // Coefficient A
             double B = -5.775e-7; // Coefficient B

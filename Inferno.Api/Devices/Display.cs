@@ -1,6 +1,7 @@
 using System;
 using System.Device.I2c.Drivers;
 using Inferno.Api.Interfaces;
+using Inferno.Api.Models;
 using Iot.Device.CharacterLcd;
 using Iot.Device.Mcp23xxx;
 
@@ -19,12 +20,12 @@ namespace Inferno.Api.Devices
             _lcd = new Lcd2004(registerSelectPin: 0, enablePin: 2, dataPins: new int[] { 4, 5, 6, 7 }, backlightPin: 3, backlightBrightness: 0.1f, readWritePin: 1, controller: _mcp); 
         }
 
-        public void DisplayInfo(double grillTemp, double probeTemp, string mode, string hardwareStatus)
+        public void DisplayInfo(Temps temps, string mode, string hardwareStatus)
         {
             string grillLabel = "Grill";
             string probeLabel = "Probe";
-            string grillValue = $"{grillTemp}*F";
-            string probeValue = (Double.IsNaN(probeTemp)) ? "Unplugged" : $"{probeTemp}*F"; 
+            string grillValue = $"{temps.GrillTemp}*F";
+            string probeValue = (temps.ProbeTemp == -1) ? "Unplugged" : $"{temps.ProbeTemp}*F"; 
 
             _lcd.SetCursorPosition(0, 0);
             _lcd.Write(JustifyWithSpaces(grillLabel, probeLabel));

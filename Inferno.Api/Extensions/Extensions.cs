@@ -1,6 +1,7 @@
 using System;
+using Inferno.Api.Models;
 
-namespace Inferno.Api.Calculation
+namespace Inferno.Api.Extensions
 {
     public static class Extensions
     {
@@ -18,6 +19,20 @@ namespace Inferno.Api.Calculation
             returnValue = Math.Max(returnValue, minValue);
             returnValue = Math.Min(returnValue, maxValue);
             return returnValue;
+        }
+
+        public static bool IsCookingMode(this SmokerMode mode)
+        {
+            if (mode == SmokerMode.Smoke ||
+                mode == SmokerMode.Hold ||
+                mode == SmokerMode.Preheat)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
     }
 }

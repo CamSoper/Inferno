@@ -1,7 +1,8 @@
 using System;
 using System.Diagnostics;
+using Inferno.Api.Extensions;
 
-namespace Inferno.Api.Calculation
+namespace Inferno.Api.Pid
 {
     public class SmokerPid
     {
@@ -26,7 +27,7 @@ namespace Inferno.Api.Calculation
         {
             double error = ActualTemp - SetPoint;
             
-            double P = GainP() * error;
+            double P = GainP() * error + 0.5;
 
             TimeSpan dT = DateTime.Now - _lastUpdate;
             _integral += error * dT.Seconds;
