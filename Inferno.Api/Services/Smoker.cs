@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Inferno.Api.Algorithms;
+using Inferno.Api.Calculation;
 using Inferno.Api.Interfaces;
 using Inferno.Api.Models;
 
@@ -17,6 +17,7 @@ namespace Inferno.Api.Services
         IRtdArray _rtdArray;
         IDisplay _display;
 
+        int _setPoint;
         int _maxSetPoint = 450;
         int _minSetPoint = 180;
         int _ignitionTemp = 140;
@@ -28,7 +29,7 @@ namespace Inferno.Api.Services
         TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
 
         CancellationTokenSource _cts;
-        PidController _pid;
+        SmokerPid _pid;
         DateTime _lastPidUpdate;
         DateTime _lastModeChange;
         bool _fireCheck;
@@ -61,7 +62,7 @@ namespace Inferno.Api.Services
 
             CancellationTokenSource _cts = new CancellationTokenSource();
 
-            _pid = new PidController(60.0, 180.0, 45.0);
+            _pid = new SmokerPid(60.0, 180.0, 45.0);
 
             _displayTask = UpdateDisplay();
             _modeLoopTask = ModeLoop();
@@ -69,11 +70,21 @@ namespace Inferno.Api.Services
         }
 
         public SmokerMode Mode => _mode;
-        public int SetPoint { get; set; }
+        public int SetPoint
+        {
+            get
+            {
+                return _setPoint;
+            }
+            set
+            {
+                _setPoint = value.Clamp(_minSetPoint, _maxSetPoint);
+            }
+        }
         public int PValue { get; set; }
         public Temps Temps => new Temps()
         {
-            GrillTemp = _rtdArray.GrillTemp,
+            GrillTemp = Double.IsNaN(_rtdArray.GrillTemp) ? -1 : _rtdArray.GrillTemp,
             ProbeTemp = Double.IsNaN(_rtdArray.ProbeTemp) ? -1 : _rtdArray.ProbeTemp
         };
 
@@ -84,9 +95,8 @@ namespace Inferno.Api.Services
             IgniterOn = _igniter.IsOn,
             Temps = this.Temps,
             FireHealthy = !_fireCheck,
-            Mode = this.Mode,
-            ModeString = this.Mode.ToString(),
-            SetPoint = this.SetPoint,
+            Mode = this.Mode.ToString(),
+            SetPoint = _setPoint,
             ModeTime = _lastModeChange,
             CurrentTime = DateTime.Now
         };
@@ -116,6 +126,11 @@ namespace Inferno.Api.Services
             if (mode == SmokerMode.Hold)
             {
                 _lastPidUpdate = DateTime.Now;
+            }
+
+            if (!IsCookingMode(mode))
+            {
+                SetPoint = _minSetPoint;
             }
 
             _mode = mode;
@@ -204,12 +219,12 @@ namespace Inferno.Api.Services
                                 await Hold();
                                 break;
 
-                            case SmokerMode.Smoke:
-                                await Smoke();
-                                break;
-
                             case SmokerMode.Preheat:
                                 await Preheat();
+                                break;
+
+                            case SmokerMode.Smoke:
+                                await Smoke();
                                 break;
 
                             case SmokerMode.Ready:
@@ -225,31 +240,6 @@ namespace Inferno.Api.Services
                     Debug.WriteLine(errorText);
                 }
 
-            }
-        }
-
-        private async Task Preheat()
-        {
-            _blower.On();
-
-            if (!_fireStarted)
-            {
-                Debug.WriteLine("Preheat: Not ignited yet - Diverting to SMOKE mode.");
-                await Smoke();
-                return;
-            }
-
-            if (_rtdArray.GrillTemp < SetPoint - 10)
-            {
-                await _auger.Run(TimeSpan.FromSeconds(10), _cts.Token);
-                if (_cts.IsCancellationRequested)
-                {
-                    Debug.WriteLine("Preheat mode cancelled while auger was running.");
-                }
-            }
-            else
-            {
-                SetMode(SmokerMode.Hold);
             }
         }
 
@@ -292,11 +282,11 @@ namespace Inferno.Api.Services
                         _fireCheck = true;
                         _fireCheckTime = DateTime.Now;
                     }
-                    else if(_fireCheck && _rtdArray.GrillTemp >= _ignitionTemp)
+                    else if (_fireCheck && _rtdArray.GrillTemp >= _ignitionTemp)
                     {
                         _fireCheck = false;
                     }
-                    else if(_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)
+                    else if (_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)
                     {
                         string errorText = "Fire timeout. Setting error mode.";
                         Debug.WriteLine(errorText);
@@ -318,7 +308,6 @@ namespace Inferno.Api.Services
         private async Task Smoke()
         {
             _blower.On();
-            SetPoint = _minSetPoint;
 
             await _auger.Run(TimeSpan.FromSeconds(15), _cts.Token);
             if (!_cts.IsCancellationRequested)
@@ -349,13 +338,13 @@ namespace Inferno.Api.Services
                 return;
             }
 
-            if (_pid.SetPoint != SetPoint)
+            if (_pid.SetPoint != _setPoint)
             {
                 Debug.WriteLine($"PID setpoint: {_pid.SetPoint}. Actual Setpoint: {SetPoint}. Updating.");
-                _pid.SetNewSetpoint(SetPoint);
+                _pid.SetPoint = _setPoint;
             }
 
-            double u = NormalizeU(_pid.GetControlVariable(_rtdArray.GrillTemp));
+            double u = _pid.GetControlVariable(_rtdArray.GrillTemp).Clamp(_uMin, _uMax);
             TimeSpan runTime = u * _holdCycle;
             await _auger.Run(runTime, _cts.Token);
             if (!_cts.IsCancellationRequested)
@@ -372,6 +361,65 @@ namespace Inferno.Api.Services
             else
             {
                 Debug.WriteLine("Hold mode cancelled while auger was running.");
+            }
+        }
+
+
+        ///<summary>
+        /// Traeger factory algorithm.
+        ///</summary>
+        private async Task Preheat()
+        {
+            _blower.On();
+
+            if (!_fireStarted)
+            {
+                Debug.WriteLine("Preheat: Not ignited yet - Diverting to SMOKE mode.");
+                await Smoke();
+                return;
+            }
+
+            TimeSpan smokeTime = TimeSpan.FromSeconds(15);
+            TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
+
+            if (_rtdArray.GrillTemp >= SetPoint - 2)
+            {
+                Debug.WriteLine("Preheat: Already at setpoint. - Maintaining.");
+
+                DateTime startTime = DateTime.Now;
+                while (DateTime.Now - startTime < smokeTime &&
+                        _rtdArray.GrillTemp >= SetPoint - 2)
+                {
+                    await _auger.Run(TimeSpan.FromSeconds(1), _cts.Token);
+                }
+
+                startTime = DateTime.Now;
+                while (DateTime.Now - startTime < waitTime &&
+                        _rtdArray.GrillTemp >= SetPoint - 2)
+                {
+                    await (Task.Delay(TimeSpan.FromSeconds(1)));
+                }
+            }
+            else
+            {
+                await _auger.Run(TimeSpan.FromSeconds(1), _cts.Token);
+
+                if (!_cts.IsCancellationRequested && _rtdArray.GrillTemp >= SetPoint)
+                {
+                    try
+                    {
+                        Debug.WriteLine("Setpoint reached while auger was running.");
+                        await Task.Delay(waitTime, _cts.Token);
+                    }
+                    catch (TaskCanceledException ex)
+                    {
+                        Debug.WriteLine($"{ex} Preheat mode cancelled while waiting to maintain.");
+                    }
+                }
+                else if (_cts.IsCancellationRequested)
+                {
+                    Debug.WriteLine("Preheat mode cancelled while auger was running.");
+                }
             }
         }
 
@@ -401,28 +449,15 @@ namespace Inferno.Api.Services
             _igniter.Off();
             _fireStarted = false;
             _fireCheck = false;
-            SetPoint = _minSetPoint;
 
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
 
-        private double NormalizeU(double u)
-        {
-            if (_rtdArray.GrillTemp >= SetPoint)
-            {
-                return _uMin;
-            }
-
-            u = Math.Max(u, _uMin);
-            u = Math.Min(u, _uMax);
-            return u;
-        }
-
         private bool IsCookingMode(SmokerMode mode)
         {
-            if ((_mode == SmokerMode.Smoke ||
+            if (_mode == SmokerMode.Smoke ||
                 _mode == SmokerMode.Hold ||
-                _mode == SmokerMode.Preheat))
+                _mode == SmokerMode.Preheat)
             {
                 return true;
             }

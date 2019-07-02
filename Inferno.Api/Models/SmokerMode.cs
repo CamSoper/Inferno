@@ -4,8 +4,8 @@ namespace Inferno.Api.Models
     {
         Ready,
         Smoke,
-        Preheat,
         Hold,
+        Preheat,
         Shutdown, 
         Error
     }
