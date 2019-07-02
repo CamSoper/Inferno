@@ -27,7 +27,7 @@ namespace Inferno.Api.Pid
         {
             double error = ActualTemp - SetPoint;
             
-            double P = GainP() * error + 0.5;
+            double P = GainP() * error;
 
             TimeSpan dT = DateTime.Now - _lastUpdate;
             _integral += error * dT.Seconds;
@@ -62,6 +62,11 @@ namespace Inferno.Api.Pid
             return GainP() * _Td;
         }
 
+        /// <summary>
+        /// Calculates a max integral value to prevent
+        /// integral taking over.
+        /// </summary>
+        /// <see cref="https://github.com/DBorello/PiSmoker/issues/2#issuecomment-507793461" />
         private double IntegralMax()
         {
             return Math.Abs(0.5 / GainI());
