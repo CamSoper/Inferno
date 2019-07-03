@@ -316,6 +316,7 @@ namespace Inferno.Api.Services
                 if (_mode == SmokerMode.Error)
                 {
                     _blower.Off();
+                    Debug.WriteLine("Error mode: Waiting indefinitely for operator to manually set mode to READY.");
                     await Task.Delay(TimeSpan.FromMilliseconds(-1), _cts.Token);
                 }
                 SetMode(SmokerMode.Ready);

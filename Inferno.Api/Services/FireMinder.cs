@@ -70,21 +70,24 @@ namespace Inferno.Api.Services
                         _smoker.SetMode(SmokerMode.Error);
                     }
 
-                    if (_fireStarted && _smoker.Temps.GrillTemp < _ignitionTemp && !_fireCheck)
+                    if (_smoker.Mode.IsCookingMode())
                     {
-                        _fireCheck = true;
-                        _fireCheckTime = DateTime.Now;
-                    }
-                    else if (_fireCheck && _smoker.Temps.GrillTemp >= _ignitionTemp)
-                    {
-                        _fireCheck = false;
-                    }
-                    else if (_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)
-                    {
-                        string errorText = "Fire timeout. Setting error mode.";
-                        Debug.WriteLine(errorText);
-                        Console.WriteLine(errorText);
-                        _smoker.SetMode(SmokerMode.Error);
+                        if (_fireStarted && _smoker.Temps.GrillTemp < _ignitionTemp && !_fireCheck)
+                        {
+                            _fireCheck = true;
+                            _fireCheckTime = DateTime.Now;
+                        }
+                        else if (_fireCheck && _smoker.Temps.GrillTemp >= _ignitionTemp)
+                        {
+                            _fireCheck = false;
+                        }
+                        else if (_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)
+                        {
+                            string errorText = "Fire timeout. Setting error mode.";
+                            Debug.WriteLine(errorText);
+                            Console.WriteLine(errorText);
+                            _smoker.SetMode(SmokerMode.Error);
+                        }
                     }
 
                     await Task.Delay(TimeSpan.FromSeconds(1));
