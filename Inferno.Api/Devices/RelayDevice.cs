@@ -1,10 +1,11 @@
 using System;
 using System.Device.Gpio;
 using System.Diagnostics;
+using Inferno.Api.Interfaces;
 
 namespace Inferno.Api.Devices
 {
-    public abstract class RelayDevice : IDisposable
+    public abstract class RelayDevice : IRelayDevice, IDisposable
     {
         GpioController _gpio;
         int _pin;

@@ -3,7 +3,7 @@ using Inferno.Api.Interfaces;
 
 namespace Inferno.Api.Devices
 {
-    public class Blower : RelayDevice, IBlower
+    public class Blower : RelayDevice
     {
         public Blower(GpioController gpio, int pin) : base(gpio, pin)
         {

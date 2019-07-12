@@ -13,8 +13,8 @@ namespace Inferno.Api.Services
     {
         SmokerMode _mode;
         IAuger _auger;
-        IBlower _blower;
-        IIgniter _igniter;
+        IRelayDevice _blower;
+        IRelayDevice _igniter;
         IRtdArray _rtdArray;
         IDisplay _display;
 
@@ -38,8 +38,8 @@ namespace Inferno.Api.Services
         FireMinder _fireMinder;
 
         public Smoker(IAuger auger,
-                        IBlower blower,
-                        IIgniter igniter,
+                        IRelayDevice blower,
+                        IRelayDevice igniter,
                         IRtdArray rtdArray,
                         IDisplay display)
         {

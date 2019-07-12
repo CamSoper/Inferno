@@ -3,7 +3,7 @@ using Inferno.Api.Interfaces;
 
 namespace Inferno.Api.Devices
 {
-    public class Igniter : RelayDevice, IIgniter
+    public class Igniter : RelayDevice
     {
         public Igniter(GpioController gpio, int pin) : base(gpio, pin)
         {

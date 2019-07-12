@@ -1,6 +1,6 @@
 namespace Inferno.Api.Interfaces
 {
-    public interface IIgniter
+    public interface IRelayDevice
     {
          void On();
          void Off();

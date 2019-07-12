@@ -10,7 +10,7 @@ namespace Inferno.Api.Services
     public class FireMinder
     {
         ISmoker _smoker;
-        IIgniter _igniter;
+        IRelayDevice _igniter;
         Task _fireMinderLoop;
 
         TimeSpan _igniterTimeout = TimeSpan.FromMinutes(10);
@@ -24,7 +24,7 @@ namespace Inferno.Api.Services
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
 
-        public FireMinder(ISmoker smoker, IIgniter igniter)
+        public FireMinder(ISmoker smoker, IRelayDevice igniter)
         {
             _smoker = smoker;
             _igniter = igniter;
