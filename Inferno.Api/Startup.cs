@@ -35,8 +35,7 @@ namespace Inferno.Api
         public void ConfigureServices(IServiceCollection services)
         {
             InitHardware();
-            services.AddSingleton(typeof(ISmoker),
-                                    new Smoker(new Auger(_gpio, 22),
+            services.AddSingleton<ISmoker>(new Smoker(new Auger(_gpio, 22),
                                                 new Blower(_gpio, 21),
                                                 new Igniter(_gpio, 23),
                                                 new RtdArray(_spi),
