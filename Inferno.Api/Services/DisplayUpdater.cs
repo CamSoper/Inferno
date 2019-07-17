@@ -14,7 +14,7 @@ namespace Inferno.Api.Services
         bool _heartbeatFlag;
 
         Task _updateDisplayLoop;
-        
+
         public DisplayUpdater(ISmoker smoker, IDisplay display)
         {
             _smoker = smoker;
@@ -43,20 +43,18 @@ namespace Inferno.Api.Services
                             _display.DisplayInfo(_smoker.Temps, "Shutting Down", HardwareStatus());
                             break;
 
-                        case SmokerMode.Hold:
-                            _display.DisplayInfo(_smoker.Temps, $"Hold {_smoker.SetPoint}*F", HardwareStatus());
-                            break;
-
-                        case SmokerMode.Preheat:
-                            _display.DisplayInfo(_smoker.Temps, $"Preheat {_smoker.SetPoint}*F", HardwareStatus());
-                            break;
-
                         case SmokerMode.Smoke:
                             _display.DisplayInfo(_smoker.Temps, $"Smoke P-{_smoker.PValue}", HardwareStatus());
                             break;
 
                         case SmokerMode.Error:
-                            _display.DisplayInfo(_smoker.Temps, $"Error:Clear fire pot", "");
+                            _display.DisplayInfo(_smoker.Temps, $"Shutdown: Fire fault", "");
+                            break;
+
+                        case SmokerMode.Hold:
+                        case SmokerMode.Preheat:
+                        default:
+                            _display.DisplayInfo(_smoker.Temps, $"{_smoker.Mode} {_smoker.SetPoint}*F", HardwareStatus());
                             break;
                     }
 
@@ -74,10 +72,18 @@ namespace Inferno.Api.Services
 
         private string HardwareStatus()
         {
-            string igniter = (_smoker.Status.IgniterOn) ? "I" : " ";
+            string fire = " ";
+            if (_smoker.Status.IgniterOn)
+            {
+                fire = "I";
+            }
+            else if (!_smoker.Status.FireHealthy)
+            {
+                fire = "F";
+            }
             string auger = (_smoker.Status.AugerOn) ? "A" : " ";
             string heartbeat = (_heartbeatFlag) ? "*" : " ";
-            return $"{igniter}{auger}{heartbeat}";
+            return $"{fire}{auger}{heartbeat}";
         }
     }
 }

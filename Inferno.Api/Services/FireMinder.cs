@@ -47,8 +47,11 @@ namespace Inferno.Api.Services
                         _smoker.Temps.GrillTemp < _ignitionTemp &&
                         !_fireStarted)
                     {
-                        _igniter.On();
-                        _igniterOnTime = DateTime.Now;
+                        if (!_igniter.IsOn)
+                        {
+                            _igniter.On();
+                            _igniterOnTime = DateTime.Now;
+                        }
                     }
                     else if (_smoker.Mode.IsCookingMode() &&
                         _smoker.Temps.GrillTemp >= _ignitionTemp)
