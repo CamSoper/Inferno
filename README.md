@@ -3,7 +3,7 @@ Wood pellet smoker powered by .NET Core and Raspberry Pi 3.
 
 ## Inferno.Api
 
-This is the core functionality. It exposes all functionality as a web API. I run it on http://localhost:5000 and, until I write UI, control the smoker by connecting to the Pi via SSH and issuing cURL commands.
+This is the core functionality. It exposes all functionality as a web API. I run it on http://localhost:5000 and, until I write a UI, control the smoker by connecting to the Pi via SSH and issuing cURL commands.
 
 ## Inferno.Cli
 
