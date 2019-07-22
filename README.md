@@ -7,7 +7,7 @@ This is the core functionality. It exposes all functionality as a web API. I run
 
 ## Inferno.Cli
 
-A command-line interface to use over SSH in lieu of cURL.
+A command-line interface to use over SSH in lieu of cURL. Work in progress.
 
 ## Inferno.TemperatureLogger
 
