@@ -1,5 +1,5 @@
 # Inferno
-Wood pellet smoker powered by .NET Core and Raspberry Pi 3.
+Wood pellet smoker powered by .NET Core and Raspberry Pi 3.  See the [photo album](https://1drv.ms/u/s!Ag9fVAifJI6dsrwlhf-iGDwD4qkaxw?e=BbMc6f)!
 
 ## Inferno.Api
 
