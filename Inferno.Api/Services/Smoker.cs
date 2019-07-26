@@ -50,6 +50,7 @@ namespace Inferno.Api.Services
             _display = display;
 
             _mode = SmokerMode.Ready;
+            _setPoint = _minSetPoint;
             _lastModeChange = DateTime.Now;
             PValue = 2;
 

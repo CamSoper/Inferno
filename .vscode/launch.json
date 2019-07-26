@@ -21,6 +21,22 @@
                 ],
                 "debuggerPath": "/home/pi/vsdbg/vsdbg"
             }
+        },
+        {
+            "name": ".NET Core SSH Attach",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "${command:pickRemoteProcess}",
+            "pipeTransport": {
+                "pipeProgram": "ssh",
+                "pipeArgs": [ "-T", "pi@inferno" ],
+                "debuggerPath": "~/vsdbg/vsdbg",
+                "pipeCwd": "${workspaceRoot}",
+                "quoteArgs": true
+            },
+            "sourceFileMap": {
+                "/home/pi/inferno/api": "${workspaceRoot}/Inferno.Api"
+            }
         },       
         {
             "name": ".NET Core Launch (web)",
