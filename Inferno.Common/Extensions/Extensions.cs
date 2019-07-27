@@ -1,7 +1,7 @@
 using System;
-using Inferno.Api.Models;
+using Inferno.Common.Models;
 
-namespace Inferno.Api.Extensions
+namespace Inferno.Common.Extensions
 {
     public static class Extensions
     {

@@ -1,4 +1,4 @@
-using Inferno.Api.Models;
+using Inferno.Common.Models;
 
 namespace Inferno.Api.Interfaces
 {

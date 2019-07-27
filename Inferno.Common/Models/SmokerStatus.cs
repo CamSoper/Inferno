@@ -1,6 +1,6 @@
 using System;
 
-namespace Inferno.Api.Models
+namespace Inferno.Common.Models
 {
     public class SmokerStatus
     {

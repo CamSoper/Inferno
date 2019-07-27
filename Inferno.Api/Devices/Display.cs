@@ -1,7 +1,7 @@
 using System;
 using System.Device.I2c.Drivers;
 using Inferno.Api.Interfaces;
-using Inferno.Api.Models;
+using Inferno.Common.Models;
 using Iot.Device.CharacterLcd;
 using Iot.Device.Mcp23xxx;
 

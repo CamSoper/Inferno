@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
-using Inferno.Api.Models;
+using Inferno.Common.Models;
 
 namespace Inferno.Api.Services
 {
@@ -44,7 +44,7 @@ namespace Inferno.Api.Services
                             break;
 
                         case SmokerMode.Smoke:
-                            _display.DisplayInfo(_smoker.Temps, $"Smoke P-{_smoker.PValue}", HardwareStatus());
+                            _display.DisplayInfo(_smoker.Temps, $"{_smoker.Mode}", HardwareStatus());
                             break;
 
                         case SmokerMode.Error:

@@ -2,10 +2,10 @@ using System;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using Inferno.Api.Extensions;
 using Inferno.Api.Interfaces;
-using Inferno.Api.Models;
+using Inferno.Common.Models;
 using Inferno.Api.Pid;
+using Inferno.Common.Extensions;
 
 namespace Inferno.Api.Services
 {
@@ -19,6 +19,7 @@ namespace Inferno.Api.Services
         IDisplay _display;
 
         int _setPoint;
+        int _pValue;
         int _maxSetPoint = 450;
         int _minSetPoint = 180;
 
@@ -75,7 +76,14 @@ namespace Inferno.Api.Services
                 _setPoint = value.Clamp(_minSetPoint, _maxSetPoint);
             }
         }
-        public int PValue { get; set; }
+        public int PValue
+        {
+            get => _pValue;            
+            set
+            {
+                _pValue = value.Clamp(0, 5);
+            }
+        }
         public Temps Temps => new Temps()
         {
             GrillTemp = Double.IsNaN(_rtdArray.GrillTemp) ? -1 : _rtdArray.GrillTemp,
@@ -108,6 +116,12 @@ namespace Inferno.Api.Services
 
             if (newMode == SmokerMode.Ready &&
                 currentMode.IsCookingMode())
+            {
+                return false;
+            }
+
+            if (newMode.IsCookingMode() && 
+                currentMode == SmokerMode.Shutdown)
             {
                 return false;
             }

@@ -1,4 +1,4 @@
-namespace Inferno.Api.Models
+namespace Inferno.Common.Models
 {
     public enum SmokerMode
     {
@@ -6,7 +6,7 @@ namespace Inferno.Api.Models
         Smoke,
         Hold,
         Preheat,
-        Shutdown, 
+        Shutdown,
         Error
     }
 }

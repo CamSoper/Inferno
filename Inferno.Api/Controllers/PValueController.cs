@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Inferno.Common.Extensions;
 
 namespace Inferno.Api.Controllers
 {

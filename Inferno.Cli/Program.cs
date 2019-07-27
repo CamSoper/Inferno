@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Inferno.Common.Models;
+using Newtonsoft.Json;
+using System;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -27,7 +29,7 @@ namespace Inferno.Cli
             switch(command)
             {
                 case Command.hold:
-
+                case Command.preheat:
                     if (args.Length < 2)
                     {
                         PrintHelp();
@@ -41,9 +43,38 @@ namespace Inferno.Cli
                     }
                     else
                     {
-                        await HoldMode(setPoint);
+                        if (command == Command.hold)
+                        {
+                            await HoldMode(setPoint);
+                        }
+                        else
+                        {
+                            await PreheatMode(setPoint);
+                        }
                         await PrintStatus();
                     }
+                    break;
+
+                case Command.p:
+                    if (args.Length > 1)
+                    {
+                        int pValue;
+                        if (!int.TryParse(args[1], out pValue))
+                        {
+                            PrintHelp();
+                            return;
+                        }
+                        else
+                        {
+                            await HandlePCommand(pValue);
+                        }
+                    }
+                    await HandlePCommand(null);
+                    break;
+
+                case Command.shutdown:
+                    await ShutdownMode();
+                    await PrintStatus();
                     break;
 
                 case Command.smoke:
@@ -51,8 +82,8 @@ namespace Inferno.Cli
                     await PrintStatus();
                     break;
 
-                case Command.shutdown:
-                    await ShutdownMode();
+                case Command.reset:
+                    await Reset();
                     await PrintStatus();
                     break;
 
@@ -75,29 +106,84 @@ namespace Inferno.Cli
 
         static void PrintHelp()
         {
+            Console.WriteLine("");
             Console.WriteLine("USAGE:");
             Console.WriteLine("");
             Console.WriteLine("Smoke mode: inferno smoke");
             Console.WriteLine("Hold mode: inferno hold nnn (where nnn is a temperature)");
+            Console.WriteLine("Preheat mode: inferno preheat nnn (where nnn is a temperature)");
             Console.WriteLine("Shutdown mode: inferno shutdown");
+            Console.WriteLine("Force ready mode: inferno reset");
+            Console.WriteLine("Display P-Value: inferno p");
+            Console.WriteLine("Adjust P-Value: inferno p n (where nnn is an integer)");
             Console.WriteLine("Display status: inferno status");
             Console.WriteLine("Continually display status: inferno status loop");
         }
 
         static async Task SmokeMode()
         {
-            await InfernoApiRequest(Endpoint.mode, "\"smoke\"");
+            await SetMode(SmokerMode.Smoke);
+        }
+
+        static async Task Reset()
+        {
+            if (Confirm())
+            {
+                await SetMode(SmokerMode.Ready);
+            }
+        }
+
+        static bool Confirm()
+        {
+            Console.WriteLine("Are you sure? (y/n)");
+            var response = Console.ReadLine();
+            if(response.Length < 1 ||
+                (!response.StartsWith("y", true, null) && 
+                    !response.StartsWith("n", true, null)))
+            {
+                return Confirm();
+            }
+
+            return response.StartsWith("y", true, null);
         }
 
         static async Task HoldMode(int setPoint)
         {
-            await InfernoApiRequest(Endpoint.mode, "\"hold\"");
+            await SetMode(SmokerMode.Hold);
             await InfernoApiRequest(Endpoint.setpoint, setPoint.ToString());
+        }
+
+        static async Task PreheatMode(int setPoint)
+        {
+            
+            await InfernoApiRequest(Endpoint.setpoint, setPoint.ToString());
+        }
+
+        static async Task HandlePCommand(int? pValue = null)
+        {
+            if (pValue == null)
+            {
+                HttpResponseMessage result = await InfernoApiRequest(Endpoint.pvalue);
+                string currentP = await result.Content.ReadAsStringAsync();
+                Console.WriteLine($"P-{currentP}");
+            }
+            else
+            {
+                await InfernoApiRequest(Endpoint.pvalue, $"{pValue}");
+            }
+        }
+
+        static async Task SetMode(SmokerMode smokerMode)
+        {
+            await InfernoApiRequest(Endpoint.mode, $"\"{smokerMode}\"");
         }
 
         static async Task ShutdownMode()
         {
-            await InfernoApiRequest(Endpoint.mode, "\"shutdown\"");
+            if (Confirm())
+            {
+                await SetMode(SmokerMode.Shutdown);
+            }
         }
 
         static async Task PrintStatus(bool loop)
@@ -120,28 +206,20 @@ namespace Inferno.Cli
         static async Task PrintStatus()
         {
             HttpResponseMessage result = await InfernoApiRequest(Endpoint.status);
-            JsonElement status =  JsonDocument.Parse(await result.Content.ReadAsStringAsync()).RootElement;
 
-            double grill = status.GetProperty("temps").GetProperty("grillTemp").GetDouble();
-            double probe = status.GetProperty("temps").GetProperty("probeTemp").GetDouble();
-            bool augerOn = status.GetProperty("augerOn").GetBoolean();
-            bool blowerOn = status.GetProperty("blowerOn").GetBoolean();
-            bool igniterOn = status.GetProperty("igniterOn").GetBoolean();
-            bool fireHealthy = status.GetProperty("fireHealthy").GetBoolean();
-            int setPoint = status.GetProperty("setPoint").GetInt32();
-            string mode = status.GetProperty("mode").GetString();
+            SmokerStatus status = JsonConvert.DeserializeObject<SmokerStatus>(await result.Content.ReadAsStringAsync());
 
-            Console.WriteLine($"Mode: {mode}");
-            Console.WriteLine($"Setpoint: {setPoint}");
+            Console.WriteLine($"Mode: {status.Mode}");
+            Console.WriteLine($"Setpoint: {status.SetPoint}");
             Console.WriteLine();
-            Console.WriteLine($"Grill temp: {grill}*F");
-            Console.WriteLine($"Probe temp: " + ((probe > 0) ? probe.ToString() + "*F" : "Unplugged"));
+            Console.WriteLine($"Grill temp: {status.Temps.GrillTemp}*F");
+            Console.WriteLine($"Probe temp: " + ((status.Temps.ProbeTemp > 0) ? status.Temps.ProbeTemp.ToString() + "*F" : "Unplugged"));
             Console.WriteLine();
-            Console.WriteLine($"Auger on: {augerOn}");
-            Console.WriteLine($"Igniter on: {igniterOn}");
-            Console.WriteLine($"Blower on: {blowerOn}");
+            Console.WriteLine($"Auger on: {status.AugerOn}");
+            Console.WriteLine($"Igniter on: {status.IgniterOn}");
+            Console.WriteLine($"Blower on: {status.BlowerOn}");
             Console.WriteLine();
-            Console.WriteLine($"Fire healthy: {fireHealthy}");
+            Console.WriteLine($"Fire healthy: {status.FireHealthy}");
         }
 
         static async Task<HttpResponseMessage> InfernoApiRequest(Endpoint endpoint, string content = "")
@@ -150,7 +228,7 @@ namespace Inferno.Cli
             HttpClient client = new HttpClient();
             HttpResponseMessage result;
 
-            if (endpoint == Endpoint.status)
+            if (string.IsNullOrEmpty(content))
             {
                 result = await client.GetAsync(requestUri);
             }
@@ -166,7 +244,8 @@ namespace Inferno.Cli
         {
             mode,
             setpoint,
-            status
+            status,
+            pvalue
         }
 
         enum Command
@@ -174,7 +253,10 @@ namespace Inferno.Cli
             smoke,
             hold,
             shutdown,
-            status
+            status,
+            reset,
+            p,
+            preheat
         }
     }
 }

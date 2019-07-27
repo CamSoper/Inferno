@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using Inferno.Api.Extensions;
+using Inferno.Common.Extensions;
 
 namespace Inferno.Api.Pid
 {
@@ -32,7 +32,7 @@ namespace Inferno.Api.Pid
 
             TimeSpan dT = DateTime.Now - _lastUpdate;
             _integral += error * dT.Seconds;
-            _integral = _integral.Clamp(-1 * IntegralMax(), IntegralMax());
+            _integral = _integral.Clamp(-IntegralMax(), IntegralMax());
             double I = GainI() * _integral;
 
             double derivative = (currentTemp - _lastTemp) / dT.Seconds;
