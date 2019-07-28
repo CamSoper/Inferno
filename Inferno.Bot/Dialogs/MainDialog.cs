@@ -103,8 +103,8 @@ namespace Inferno.Bot.Dialogs
                                    "Unplugged" : $"{status.Temps.ProbeTemp}°F";
 
             var statusText = $"**Mode:** {modeText}\n";
-            statusText += $"**Grill temp:** {status.Temps.GrillTemp}°F\n";
-            statusText += $"**Probe temp:** {probeText}\n";
+            statusText += $"**Grill:** {status.Temps.GrillTemp}°F\n";
+            statusText += $"**Probe:** {probeText}\n";
 
 
             await stepContext.Context.SendActivityAsync(MessageFactory.Text(statusText), cancellationToken);

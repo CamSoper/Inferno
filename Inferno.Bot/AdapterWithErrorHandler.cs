@@ -20,8 +20,8 @@ namespace Inferno.Bot
                 logger.LogError($"Exception caught : {exception.Message}");
 
                 // Send a catch-all apology to the user.
-                await turnContext.SendActivityAsync("Sorry, it looks like something went wrong. This might be useful for Cam:");
-                await turnContext.SendActivityAsync($"{exception.Message}\n\n{exception.StackTrace}");
+                await turnContext.SendActivityAsync("Sorry, it looks like something went wrong. This is what happened:");
+                await turnContext.SendActivityAsync($"{exception.Message}");
                 await this.SignOutUserAsync(turnContext);
                 await turnContext.SendActivityAsync($"You have been signed out.");
             };
