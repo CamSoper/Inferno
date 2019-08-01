@@ -1,6 +1,8 @@
 ﻿# Inferno.Bot
 
-Bot Framework v4 echo bot sample.
+Built from: Bot Framework v4 echo bot sample.
+
+And some others. Copied and pasted from several samples, actually.
 
 This bot has been created using [Bot Framework](https://dev.botframework.com), it shows how to create a simple bot that accepts input from the user and echoes it back.
 
