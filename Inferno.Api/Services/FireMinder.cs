@@ -12,14 +12,16 @@ namespace Inferno.Api.Services
         ISmoker _smoker;
         IRelayDevice _igniter;
         Task _fireMinderLoop;
-
         TimeSpan _igniterTimeout = TimeSpan.FromMinutes(10);
-        TimeSpan _fireTimeout = TimeSpan.FromMinutes(5);
+        TimeSpan _fireTimeout = TimeSpan.FromMinutes(10);
         DateTime _igniterOnTime;
-        int _ignitionTemp = 140;
         bool _fireCheck;
         DateTime _fireCheckTime;
         bool _fireStarted;
+        int _ignitionTemp;
+        private readonly int _ignitionThreshold = 20;
+        private readonly int _fireCheckThreshold = 50;
+
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
@@ -35,7 +37,21 @@ namespace Inferno.Api.Services
         {
             _fireStarted = false;
             _fireCheck = false;
+            _ignitionTemp = (int)_smoker.Temps.GrillTemp + _ignitionThreshold;
         }
+
+        public int GetFireCheckTemp()
+        {
+            if(_smoker.Mode == SmokerMode.Smoke)
+            {
+                return 130;
+            }
+            else
+            {
+                return _smoker.SetPoint - _fireCheckThreshold;
+            }
+        }
+
         private async Task FireMinderLoop()
         {
             Debug.WriteLine("Starting Fire Minder thread.");
@@ -53,12 +69,6 @@ namespace Inferno.Api.Services
                             _igniterOnTime = DateTime.Now;
                         }
                     }
-                    else if (_smoker.Mode.IsCookingMode() &&
-                        _smoker.Temps.GrillTemp >= _ignitionTemp)
-                    {
-                        _fireStarted = true;
-                        _igniter.Off();
-                    }
                     else
                     {
                         _igniter.Off();
@@ -75,12 +85,17 @@ namespace Inferno.Api.Services
 
                     if (_smoker.Mode.IsCookingMode())
                     {
-                        if (_fireStarted && _smoker.Temps.GrillTemp < _ignitionTemp && !_fireCheck)
+                        if(_smoker.Temps.GrillTemp >= GetFireCheckTemp())
+                        {
+                            _fireStarted = true;
+                        }
+
+                        if (_fireStarted && _smoker.Temps.GrillTemp < GetFireCheckTemp() && !_fireCheck)
                         {
                             _fireCheck = true;
                             _fireCheckTime = DateTime.Now;
                         }
-                        else if (_fireCheck && _smoker.Temps.GrillTemp >= _ignitionTemp)
+                        else if (_fireCheck && _smoker.Temps.GrillTemp >= GetFireCheckTemp())
                         {
                             _fireCheck = false;
                         }

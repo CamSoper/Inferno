@@ -165,7 +165,7 @@ namespace Inferno.Bot.Dialogs
                     return await stepContext.PromptAsync(_setpointKey, promptOptions, cancellationToken);
                 
                 case "shutdown":
-                    return await stepContext.PromptAsync(_shutdownKey, new PromptOptions { Prompt = MessageFactory.Text("Are you sure you want to shut down? This takes a while.") }, cancellationToken);
+                    return await stepContext.PromptAsync(_shutdownKey, new PromptOptions { Prompt = MessageFactory.Text("Are you sure you want to shut down? The smoker will be in shutdown mode for 10 minutes and unable to accept any other commands.") }, cancellationToken);
 
                 case "smoke":
                     await SetSmoke(stepContext);

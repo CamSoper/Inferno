@@ -12,7 +12,7 @@ namespace Inferno.Api.Services
     public class Smoker : ISmoker
     {
         SmokerMode _mode;
-        IAuger _auger;
+        IRelayDevice _auger;
         IRelayDevice _blower;
         IRelayDevice _igniter;
         IRtdArray _rtdArray;
@@ -38,7 +38,7 @@ namespace Inferno.Api.Services
         DisplayUpdater _displayUpdater;
         FireMinder _fireMinder;
 
-        public Smoker(IAuger auger,
+        public Smoker(IRelayDevice auger,
                         IRelayDevice blower,
                         IRelayDevice igniter,
                         IRtdArray rtdArray,
@@ -65,6 +65,7 @@ namespace Inferno.Api.Services
         }
 
         public SmokerMode Mode => _mode;
+
         public int SetPoint
         {
             get
@@ -102,7 +103,7 @@ namespace Inferno.Api.Services
             ModeTime = _lastModeChange,
             CurrentTime = DateTime.Now
         };
-
+        
         public bool SetMode(SmokerMode newMode)
         {
             Debug.WriteLine($"Setting mode {newMode}.");
@@ -124,6 +125,12 @@ namespace Inferno.Api.Services
                 currentMode == SmokerMode.Shutdown)
             {
                 return false;
+            }
+
+            if (newMode.IsCookingMode() &&
+                currentMode == SmokerMode.Ready)
+            {
+                _fireMinder.ResetFireStatus();
             }
 
             if (newMode == SmokerMode.Hold)
@@ -199,22 +206,11 @@ namespace Inferno.Api.Services
         private async Task Smoke()
         {
             _blower.On();
-
-            await _auger.Run(TimeSpan.FromSeconds(15), _cts.Token);
-            if (!_cts.IsCancellationRequested)
+            TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
+            await RunAugerAndWait(TimeSpan.FromSeconds(15), waitTime);
+            if (_cts.IsCancellationRequested)
             {
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(45 + (10 * PValue)), _cts.Token);
-                }
-                catch (TaskCanceledException ex)
-                {
-                    Debug.WriteLine($"{ex} Smoke mode cancelled while waiting.");
-                }
-            }
-            else
-            {
-                Debug.WriteLine("Smoke mode cancelled while auger was running.");
+                Debug.WriteLine("Smoke mode cancelled.");
             }
         }
 
@@ -240,21 +236,54 @@ namespace Inferno.Api.Services
 
             double u = _pid.GetControlVariable(_rtdArray.GrillTemp).Clamp(_uMin, _uMax);
             TimeSpan runTime = u * _holdCycle;
-            await _auger.Run(runTime, _cts.Token);
-            if (!_cts.IsCancellationRequested)
+            if (runTime == _holdCycle)
             {
-                try
-                {
-                    await Task.Delay(_holdCycle - runTime, _cts.Token);
-                }
-                catch (TaskCanceledException ex)
-                {
-                    Debug.WriteLine($"{ex} Hold mode cancelled while waiting.");
-                }
+                await RunAugerContinually();
             }
             else
             {
-                Debug.WriteLine("Hold mode cancelled while auger was running.");
+                // Run a certain amount of time
+                await RunAugerAndWait(runTime, _holdCycle - runTime);
+            }
+        }
+
+        private async Task RunAugerAndWait(TimeSpan RunTime, TimeSpan WaitTime)
+        {
+            Debug.WriteLine($"Auger running: {RunTime.Seconds} seconds.");
+            // Run the auger
+            _auger.On();
+            try
+            {
+                await Task.Delay(RunTime, _cts.Token);
+            }
+            catch (TaskCanceledException ex)
+            {
+                Debug.WriteLine($"{ex} Cancelled while auger running.");
+                return;
+            }
+
+            _auger.Off();
+            try
+            {
+                await Task.Delay(WaitTime, _cts.Token);
+            }
+            catch (TaskCanceledException ex)
+            {
+                Debug.WriteLine($"{ex} Cancelled while auger waiting.");
+            }
+        }
+
+        private async Task RunAugerContinually()
+        {
+            // Run the entire runtime unless we hear otherwise
+            _auger.On();
+            try
+            {
+                await Task.Delay(_holdCycle, _cts.Token);
+            }
+            catch (TaskCanceledException ex)
+            {
+                Debug.WriteLine($"{ex} Running auger cancelled.");
             }
         }
 
@@ -263,59 +292,9 @@ namespace Inferno.Api.Services
         /// Traeger factory algorithm for cooking. 
         /// Generally should not be used. Use Hold instead.
         ///</summary>
-        private async Task Preheat()
+        private Task Preheat()
         {
-            _blower.On();
-
-            if (!_fireMinder.IsFireStarted)
-            {
-                Debug.WriteLine("Preheat: Not ignited yet. Diverting to SMOKE mode.");
-                await Smoke();
-                return;
-            }
-
-            TimeSpan smokeTime = TimeSpan.FromSeconds(15);
-            TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
-
-            if (_rtdArray.GrillTemp >= SetPoint - 2)
-            {
-                Debug.WriteLine("Preheat: Already at setpoint. - Maintaining.");
-
-                DateTime startTime = DateTime.Now;
-                while (DateTime.Now - startTime < smokeTime &&
-                        _rtdArray.GrillTemp >= SetPoint - 2)
-                {
-                    await _auger.Run(TimeSpan.FromSeconds(1), _cts.Token);
-                }
-
-                startTime = DateTime.Now;
-                while (DateTime.Now - startTime < waitTime &&
-                        _rtdArray.GrillTemp >= SetPoint - 2)
-                {
-                    await (Task.Delay(TimeSpan.FromSeconds(1)));
-                }
-            }
-            else
-            {
-                await _auger.Run(TimeSpan.FromSeconds(1), _cts.Token);
-
-                if (!_cts.IsCancellationRequested && _rtdArray.GrillTemp >= SetPoint)
-                {
-                    try
-                    {
-                        Debug.WriteLine("Setpoint reached while auger was running.");
-                        await Task.Delay(waitTime, _cts.Token);
-                    }
-                    catch (TaskCanceledException ex)
-                    {
-                        Debug.WriteLine($"{ex} Preheat mode cancelled while waiting to maintain.");
-                    }
-                }
-                else if (_cts.IsCancellationRequested)
-                {
-                    Debug.WriteLine("Preheat mode cancelled while auger was running.");
-                }
-            }
+            throw new NotImplementedException();
         }
 
         ///<summary>
@@ -323,6 +302,7 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Shutdown()
         {
+            _auger.Off();
             _blower.On();
             _igniter.Off();
             try
@@ -347,9 +327,9 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Ready()
         {
+            _auger.Off();
             _blower.Off();
             _igniter.Off();
-            _fireMinder.ResetFireStatus();
 
             await Task.Delay(TimeSpan.FromSeconds(1));
         }
