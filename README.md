@@ -15,7 +15,7 @@ A command-line interface for the API.
 
 ## Inferno.Common
 
-Common classes shared between projects.
+Class library shared between projects.
 
 ## Inferno.RelayListener
 
