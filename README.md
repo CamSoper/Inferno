@@ -15,11 +15,11 @@ A command-line interface for the API.
 
 ## Inferno.Common
 
-Common classes shared between projects.
+Class library shared between projects.
 
 ## Inferno.RelayListener
 
-Service that makes an outgoing connection to an Azure Relay Hybrid Connection and relays requests to API from the cloud.
+Service that makes an outgoing connection to an Azure Relay Hybrid Connection and relays requests from the Bot to the API from the cloud.
 
 ## Inferno.TemperatureLogger
 
