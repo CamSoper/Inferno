@@ -6,9 +6,7 @@ using Microsoft.Extensions.Hosting;
 using System.Device.Gpio;
 using System.Device.Gpio.Drivers;
 using System.Device.Spi;
-using System.Device.Spi.Drivers;
 using System.Device.I2c;
-using System.Device.I2c.Drivers;
 using Inferno.Api.Services;
 using Inferno.Api.Interfaces;
 using Inferno.Api.Devices;
@@ -18,8 +16,8 @@ namespace Inferno.Api
     public class Startup
     {
         GpioController _gpio;
-        UnixSpiDevice _spi;
-        UnixI2cDevice _i2c;
+        SpiDevice _spi;
+        I2cDevice _i2c;
 
 
         public Startup(IConfiguration configuration)
@@ -72,14 +70,14 @@ namespace Inferno.Api
         {
             _gpio = new GpioController(PinNumberingScheme.Logical, new RaspberryPi3Driver());
 
-            SpiConnectionSettings connection = new SpiConnectionSettings(0, 0)
+            SpiConnectionSettings spiConnSettings = new SpiConnectionSettings(0, 0)
             {
                 ClockFrequency = 1000000,
                 Mode = SpiMode.Mode0
             };
-            _spi = new UnixSpiDevice(connection);
+            _spi = SpiDevice.Create(spiConnSettings);
 
-            _i2c = new UnixI2cDevice(new I2cConnectionSettings(1, 0x27));
+            _i2c = I2cDevice.Create(new I2cConnectionSettings(1, 0x27));
         }
     }
 }

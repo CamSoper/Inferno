@@ -18,7 +18,7 @@ namespace Inferno.Api.Services
         bool _fireCheck;
         DateTime _fireCheckTime;
         bool _fireStarted;
-        int _ignitionTemp;
+        int _ignitionTemp = 140;
         private readonly int _ignitionThreshold = 20;
         private readonly int _fireCheckThreshold = 50;
 
@@ -37,7 +37,6 @@ namespace Inferno.Api.Services
         {
             _fireStarted = false;
             _fireCheck = false;
-            _ignitionTemp = (int)_smoker.Temps.GrillTemp + _ignitionThreshold;
         }
 
         public int GetFireCheckTemp()
@@ -48,7 +47,7 @@ namespace Inferno.Api.Services
             }
             else
             {
-                return _smoker.SetPoint - _fireCheckThreshold;
+                return 160;
             }
         }
 
@@ -85,7 +84,7 @@ namespace Inferno.Api.Services
 
                     if (_smoker.Mode.IsCookingMode())
                     {
-                        if(_smoker.Temps.GrillTemp >= GetFireCheckTemp())
+                        if(_smoker.Temps.GrillTemp >= _ignitionTemp)
                         {
                             _fireStarted = true;
                         }

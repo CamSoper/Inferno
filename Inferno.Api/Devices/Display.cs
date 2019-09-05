@@ -1,5 +1,5 @@
 using System;
-using System.Device.I2c.Drivers;
+using System.Device.I2c;
 using Inferno.Api.Interfaces;
 using Inferno.Common.Models;
 using Iot.Device.CharacterLcd;
@@ -9,11 +9,11 @@ namespace Inferno.Api.Devices
 {
     public class Display : IDisplay, IDisposable
     {
-        UnixI2cDevice _i2c;
+        I2cDevice _i2c;
         Mcp23008 _mcp;
         Lcd2004 _lcd;
 
-        public Display(UnixI2cDevice i2c)
+        public Display(I2cDevice i2c)
         {
             _i2c = i2c;
             _mcp = new Mcp23008(_i2c);

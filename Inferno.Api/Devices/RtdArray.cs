@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Concurrent;
-using System.Device.Spi.Drivers;
+using System.Device.Spi;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 using Iot.Device.Mcp3008;
@@ -16,7 +16,7 @@ namespace Inferno.Api.Devices
 
         Task _adcReadTask;
 
-        public RtdArray(UnixSpiDevice spi)
+        public RtdArray(SpiDevice spi)
         {
             _adc = new Mcp3008(spi);
             _grillResistances = new ConcurrentQueue<double>();
