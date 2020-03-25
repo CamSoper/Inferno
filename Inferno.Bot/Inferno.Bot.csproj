@@ -19,10 +19,6 @@
   </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Models\" />
-    </ItemGroup>
-
-    <ItemGroup>
       <ProjectReference Include="..\Inferno.Common\Inferno.Common.csproj" />
     </ItemGroup>
 

@@ -18,7 +18,7 @@ namespace Inferno.Api.Services
         bool _fireCheck;
         DateTime _fireCheckTime;
         bool _fireStarted;
-        int _ignitionTemp = 140;
+        int _ignitionTemp = 125;
         private readonly int _ignitionThreshold = 20;
         private readonly int _fireCheckThreshold = 50;
 

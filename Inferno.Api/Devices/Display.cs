@@ -13,11 +13,16 @@ namespace Inferno.Api.Devices
         Mcp23008 _mcp;
         Lcd2004 _lcd;
 
-        public Display(I2cDevice i2c)
+        public Display()
         {
-            _i2c = i2c;
+            Init();
+        }
+
+        public void Init()
+        {
+            _i2c = I2cDevice.Create(new I2cConnectionSettings(1, 0x27));
             _mcp = new Mcp23008(_i2c);
-            _lcd = new Lcd2004(registerSelectPin: 0, enablePin: 2, dataPins: new int[] { 4, 5, 6, 7 }, backlightPin: 3, backlightBrightness: 0.1f, readWritePin: 1, controller: _mcp); 
+            _lcd = new Lcd2004(registerSelectPin: 0, enablePin: 2, dataPins: new int[] { 4, 5, 6, 7 }, backlightPin: 3, backlightBrightness: 0.1f, readWritePin: 1, controller: _mcp);
         }
 
         public void DisplayInfo(Temps temps, string mode, string hardwareStatus)
@@ -74,6 +79,7 @@ namespace Inferno.Api.Devices
                 if (disposing)
                 {
                     DisplayText("Shutting down...", "", "", "Goodbye!".PadLeft(20));
+                    _i2c.Dispose();
                     _lcd.Dispose();
                     _mcp.Dispose();
                 }

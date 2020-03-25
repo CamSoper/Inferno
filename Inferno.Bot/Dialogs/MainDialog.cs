@@ -13,6 +13,8 @@ using Microsoft.Bot.Builder.Dialogs.Choices;
 using Microsoft.Bot.Schema;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Linq;
+using Inferno.Bot.Models;
 
 namespace Inferno.Bot.Dialogs
 {
@@ -20,6 +22,7 @@ namespace Inferno.Bot.Dialogs
     {
         protected readonly ILogger _logger;
         protected readonly SmokerRelayClient _smoker;
+        private static readonly MemoryStorage _storage = new MemoryStorage();
         private readonly string _authLoopKey = "Dialog.Main";
         private readonly string _smokerLoopKey = "Dialog.Smoker";
         private readonly string _oAuthPromptKey = "Prompt.OAuth";
@@ -27,6 +30,7 @@ namespace Inferno.Bot.Dialogs
         private readonly string _setpointKey = "Prompt.Setpoint";
         private readonly string _shutdownKey = "Prompt.Shutdown";
         private readonly string _errText = "I'm sorry, I wasn't able to do that.";
+        private readonly string _prePromptUtteranceKey = "PrePromptUtterance"; 
 
         public MainDialog(IConfiguration configuration, ILogger<MainDialog> logger, SmokerRelayClient smoker)
             : base(nameof(MainDialog), configuration["ConnectionName"])
@@ -39,8 +43,8 @@ namespace Inferno.Bot.Dialogs
                 new OAuthPromptSettings
                 {
                     ConnectionName = ConnectionName,
-                    Text = "Welcome to Inferno! Please sign in to continue.",
-                    Title = "Inferno Sign In",
+                    Text = "Please sign in to continue.",
+                    Title = "Inferno Sign In", 
                     Timeout = 300000, // User has 5 minutes to login (1000 * 60 * 5)
                 }));
 
@@ -69,7 +73,15 @@ namespace Inferno.Bot.Dialogs
 
         private async Task<DialogTurnResult> PromptLogin(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
+            await StorePrePromptUtterance(stepContext, cancellationToken);
             return await stepContext.BeginDialogAsync(_oAuthPromptKey, null, cancellationToken);
+        }
+
+        private async Task StorePrePromptUtterance(WaterfallStepContext stepContext, CancellationToken cancellationToken)
+        {
+            var changes = new Dictionary<string, object>();
+            changes.Add(_prePromptUtteranceKey, new Utterance() { Text = stepContext.Context.Activity.Text.ToLower() });
+            await _storage.WriteAsync(changes, cancellationToken);
         }
 
         private async Task<DialogTurnResult> ProcessLogin(WaterfallStepContext stepContext, CancellationToken cancellationToken)
@@ -79,16 +91,13 @@ namespace Inferno.Bot.Dialogs
             var tokenResponse = (TokenResponse)stepContext.Result;
             if (tokenResponse != null)
             {
-
-                await SendGreeting(stepContext, cancellationToken);
-                await SendStatus(stepContext, cancellationToken);
-
                 return await stepContext.BeginDialogAsync(_smokerLoopKey, null, cancellationToken);
             }
 
-            await stepContext.Context.SendActivityAsync(MessageFactory.Text("Login was not successful please try again."), cancellationToken);
+            await stepContext.Context.SendActivityAsync(MessageFactory.Text("Login was not successful. Please try again."), cancellationToken);
             return await stepContext.EndDialogAsync(cancellationToken: cancellationToken);
         }
+
 
         private async Task SendStatus(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
@@ -110,45 +119,45 @@ namespace Inferno.Bot.Dialogs
             await stepContext.Context.SendActivityAsync(MessageFactory.Text(statusText), cancellationToken);
         }
 
-        private async Task SendGreeting(WaterfallStepContext stepContext, CancellationToken cancellationToken)
-        {
-            var heroCard = new HeroCard
-            {
-                Title = "Inferno",
-                Subtitle = "Intelligent Smoker",
-                Text = $"Hello, {stepContext.Context.Activity.From.Name}! Let's get smoking!",
-                Images = new List<CardImage> { new CardImage("https://infernobot.blob.core.windows.net/images/grill.jpg") },
-            };
-
-            // So we need to create a list of attachments for the reply activity.
-            var attachments = new List<Attachment>();
-            // Reply to the activity we received with an activity.
-            var greeting = MessageFactory.Attachment(attachments);
-            greeting.Attachments.Add(heroCard.ToAttachment());
-            await stepContext.Context.SendActivityAsync(greeting, cancellationToken);
-        }
-
         private async Task<DialogTurnResult> PromptCommand(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            var modePrompt = MessageFactory.Text("What would you like to do?");
-
-            modePrompt.SuggestedActions = new SuggestedActions()
+            var prePromptUtterance = (await _storage.ReadAsync<Utterance>(new string[] { _prePromptUtteranceKey }))?.FirstOrDefault().Value;
+            if (prePromptUtterance != null)
             {
-                Actions = new List<CardAction>()
-                {
-                    new CardAction() { Title = "Smoke", Type = ActionTypes.ImBack, Value = "Smoke" },
-                    new CardAction() { Title = "Hold", Type = ActionTypes.ImBack, Value = "Hold" },
-                    new CardAction() { Title = "Status", Type = ActionTypes.ImBack, Value = "Status" },
-                    new CardAction() { Title = "Shutdown", Type = ActionTypes.ImBack, Value = "Shutdown" },
-                },
-            };
-            return await stepContext.PromptAsync(_modePromptKey, new PromptOptions { Prompt = modePrompt }, cancellationToken);
+                return await ExecuteCommand(stepContext, cancellationToken);
+            }
+            else
+            {
+                var modePrompt = MessageFactory.Text("What would you like to do?");
 
+                modePrompt.SuggestedActions = new SuggestedActions()
+                {
+                    Actions = new List<CardAction>()
+                    {
+                        new CardAction() { Title = "Smoke", Type = ActionTypes.ImBack, Value = "Smoke" },
+                        new CardAction() { Title = "Hold", Type = ActionTypes.ImBack, Value = "Hold" },
+                        new CardAction() { Title = "Status", Type = ActionTypes.ImBack, Value = "Status" },
+                        new CardAction() { Title = "Shutdown", Type = ActionTypes.ImBack, Value = "Shutdown" },
+                    },
+                };
+                return await stepContext.PromptAsync(_modePromptKey, new PromptOptions { Prompt = modePrompt }, cancellationToken);
+
+            }
         }
 
         private async Task<DialogTurnResult> ExecuteCommand(WaterfallStepContext stepContext, CancellationToken cancellationToken)
         {
-            string resultText = stepContext.Result.ToString().ToLower();
+            string resultText;
+            var prePromptUtterance = (await _storage.ReadAsync<Utterance>(new string[] { _prePromptUtteranceKey }))?.FirstOrDefault().Value;
+            if (prePromptUtterance != null)
+            {
+                resultText = prePromptUtterance.Text;
+                await _storage.DeleteAsync(new string[] { _prePromptUtteranceKey }, cancellationToken);
+            }
+            else
+            {
+                resultText = stepContext.Result.ToString().ToLower();
+            }
             
             switch(resultText)
             {

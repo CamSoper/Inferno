@@ -37,7 +37,7 @@ namespace Inferno.Api
                                                 new Blower(_gpio, 21),
                                                 new Igniter(_gpio, 23),
                                                 new RtdArray(_spi),
-                                                new Display(_i2c)));
+                                                new Display()));
             services.AddControllers();
         }
 
@@ -76,8 +76,6 @@ namespace Inferno.Api
                 Mode = SpiMode.Mode0
             };
             _spi = SpiDevice.Create(spiConnSettings);
-
-            _i2c = I2cDevice.Create(new I2cConnectionSettings(1, 0x27));
         }
     }
 }
