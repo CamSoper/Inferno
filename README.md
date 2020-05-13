@@ -1,5 +1,9 @@
 # Inferno
-Wood pellet smoker powered by .NET Core and Raspberry Pi 3.  See the [photo album](https://1drv.ms/u/s!Ag9fVAifJI6dsrwlhf-iGDwD4qkaxw?e=BbMc6f)! See me [demo the smoker on the stream I co-host, The DotNet Docs](https://www.twitch.tv/videos/581536242)! See it [featured on an episode of On .NET](https://www.youtube.com/watch?v=4kJGRuXZ4kg)!
+Wood pellet smoker powered by .NET Core and Raspberry Pi 3.  
+
+* See the [photo album](https://1drv.ms/u/s!Ag9fVAifJI6dsrwlhf-iGDwD4qkaxw?e=BbMc6f)!
+* See it [featured on an episode of On .NET](https://www.youtube.com/watch?v=4kJGRuXZ4kg)! This is a short overview and discussion.
+* See me [demo the smoker on the stream I co-host, The DotNet Docs](https://www.twitch.tv/videos/581536242)! This is a more in-depth review of some of the code along with a live demo.
 
 ## Inferno.Api
 
