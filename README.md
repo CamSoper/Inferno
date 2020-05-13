@@ -3,7 +3,7 @@ Wood pellet smoker powered by .NET Core and Raspberry Pi 3.  See the [photo albu
 
 ## Inferno.Api
 
-This is the core functionality. It exposes all functionality as a web API. I run it on http://localhost:5000 and control it via a variety of tools.
+This is the core functionality. It exposes all functionality as a web API. I run it on http://localhost:5000 and control it via a variety of tools. The PID algorithm, fire minder, and display logic all reside here.
 
 ## Inferno.Bot
 
