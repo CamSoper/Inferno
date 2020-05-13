@@ -30,4 +30,7 @@ Service that makes an outgoing connection to an Azure Relay Hybrid Connection an
 A tool I made for gathering telemetry. It polls the local instance of Inferno.Api and outputs temperature readings in a CSV format. I run it as a background task, piping the output to a file for later analysis in Excel.
 
 ## Hardware
+
+The grill itself is a Traeger Junior Elite 20. The custom hardware is comprised of a Raspberry Pi 3, some relays for controlling the 110V circuits, a 20x4 LCD display, a MCP3008 analog to digital converter.
+ 
 ![Raspberry Pi and components](Hardware/Images/Inferno_bb.png)
