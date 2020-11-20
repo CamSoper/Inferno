@@ -207,7 +207,7 @@ namespace Inferno.Api.Services
         {
             _blower.On();
             TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
-            await RunAugerAndWait(TimeSpan.FromSeconds(15), waitTime);
+            await RunAuger(TimeSpan.FromSeconds(15), waitTime);
             if (_cts.IsCancellationRequested)
             {
                 Debug.WriteLine("Smoke mode cancelled.");
@@ -238,16 +238,16 @@ namespace Inferno.Api.Services
             TimeSpan runTime = u * _holdCycle;
             if (runTime == _holdCycle)
             {
-                await RunAugerContinually();
+                await RunAuger();
             }
             else
             {
                 // Run a certain amount of time
-                await RunAugerAndWait(runTime, _holdCycle - runTime);
+                await RunAuger(runTime, _holdCycle - runTime);
             }
         }
 
-        private async Task RunAugerAndWait(TimeSpan RunTime, TimeSpan WaitTime)
+        private async Task RunAuger(TimeSpan RunTime, TimeSpan WaitTime)
         {
             Debug.WriteLine($"Auger running: {RunTime.Seconds} seconds.");
             // Run the auger
@@ -273,7 +273,7 @@ namespace Inferno.Api.Services
             }
         }
 
-        private async Task RunAugerContinually()
+        private async Task RunAuger()
         {
             // Run the entire runtime unless we hear otherwise
             _auger.On();

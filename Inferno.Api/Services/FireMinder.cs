@@ -19,9 +19,6 @@ namespace Inferno.Api.Services
         DateTime _fireCheckTime;
         bool _fireStarted;
         int _ignitionTemp = 125;
-        private readonly int _ignitionThreshold = 20;
-        private readonly int _fireCheckThreshold = 50;
-
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
@@ -43,10 +40,14 @@ namespace Inferno.Api.Services
         {
             if(_smoker.Mode == SmokerMode.Smoke)
             {
-                return 130;
+                return 140;
             }
             else
             {
+                // ToDo: Add event to Smoker that raises during a setpoint increase
+                // Then change this method so that we return the following, but NOT
+                // immediately after a SetPoint increase...
+                //return _smoker.SetPoint - (_smoker.SetPoint / 180 * 30);
                 return 160;
             }
         }
@@ -92,10 +93,15 @@ namespace Inferno.Api.Services
                         if (_fireStarted && _smoker.Temps.GrillTemp < GetFireCheckTemp() && !_fireCheck)
                         {
                             _fireCheck = true;
+                            if (!_igniter.IsOn)
+                            {
+                                _igniter.On();
+                            }
                             _fireCheckTime = DateTime.Now;
                         }
                         else if (_fireCheck && _smoker.Temps.GrillTemp >= GetFireCheckTemp())
                         {
+                            _igniter.Off();
                             _fireCheck = false;
                         }
                         else if (_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)

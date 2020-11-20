@@ -3,8 +3,8 @@ using System.Collections.Concurrent;
 using System.Device.Spi;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
-using Iot.Device.Mcp3008;
 using System.Linq;
+using Iot.Device.Adc;
 
 namespace Inferno.Api.Devices
 {
@@ -33,8 +33,8 @@ namespace Inferno.Api.Devices
         {
             while (true)
             {
-                int grillValue = _adc.Read(0, Mcp3008.InputConfiguration.SingleEnded);
-                int probeValue = _adc.Read(1, Mcp3008.InputConfiguration.SingleEnded);
+                int grillValue = _adc.Read(0);
+                int probeValue = _adc.Read(1);
 
                 _grillResistances.Enqueue(CalculateResistanceFromAdc(grillValue));
                 _probeResistances.Enqueue(CalculateResistanceFromAdc(probeValue));

@@ -1,16 +1,18 @@
 using System;
+using System.Device.Gpio;
 using System.Device.I2c;
 using Inferno.Api.Interfaces;
 using Inferno.Common.Models;
 using Iot.Device.CharacterLcd;
 using Iot.Device.Mcp23xxx;
+using Iot.Device.Pcx857x;
 
 namespace Inferno.Api.Devices
 {
     public class Display : IDisplay, IDisposable
     {
         I2cDevice _i2c;
-        Mcp23008 _mcp;
+        Pcf8574 _driver;
         Lcd2004 _lcd;
 
         public Display()
@@ -21,8 +23,14 @@ namespace Inferno.Api.Devices
         public void Init()
         {
             _i2c = I2cDevice.Create(new I2cConnectionSettings(1, 0x27));
-            _mcp = new Mcp23008(_i2c);
-            _lcd = new Lcd2004(registerSelectPin: 0, enablePin: 2, dataPins: new int[] { 4, 5, 6, 7 }, backlightPin: 3, backlightBrightness: 0.1f, readWritePin: 1, controller: _mcp);
+            _driver = new Pcf8574(_i2c);
+            _lcd = new Lcd2004(registerSelectPin: 0, 
+                    enablePin: 2, 
+                    dataPins: new int[] { 4, 5, 6, 7 }, 
+                    backlightPin: 3, 
+                    backlightBrightness: 0.1f, 
+                    readWritePin: 1, 
+                    controller: new GpioController(PinNumberingScheme.Logical, _driver));
         }
 
         public void DisplayInfo(Temps temps, string mode, string hardwareStatus)
@@ -81,7 +89,7 @@ namespace Inferno.Api.Devices
                     DisplayText("Shutting down...", "", "", "Goodbye!".PadLeft(20));
                     _i2c.Dispose();
                     _lcd.Dispose();
-                    _mcp.Dispose();
+                    _driver.Dispose();
                 }
 
                 // TODO: free unmanaged resources (unmanaged objects) and override a finalizer below.

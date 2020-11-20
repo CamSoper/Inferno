@@ -129,6 +129,7 @@ namespace Inferno.Cli
         {
             if (Confirm())
             {
+                await SetMode(SmokerMode.Shutdown);
                 await SetMode(SmokerMode.Ready);
             }
         }
