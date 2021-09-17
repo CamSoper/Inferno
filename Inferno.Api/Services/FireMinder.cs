@@ -18,7 +18,7 @@ namespace Inferno.Api.Services
         bool _fireCheck;
         DateTime _fireCheckTime;
         bool _fireStarted;
-        int _ignitionTemp = 125;
+        int _ignitionTemp=200;
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
@@ -66,6 +66,7 @@ namespace Inferno.Api.Services
                         if (!_igniter.IsOn)
                         {
                             _igniter.On();
+                            _ignitionTemp = Convert.ToInt32(_smoker.Temps.GrillTemp) + 10;
                             _igniterOnTime = DateTime.Now;
                         }
                     }

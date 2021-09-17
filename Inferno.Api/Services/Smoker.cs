@@ -223,9 +223,9 @@ namespace Inferno.Api.Services
 
             if (!_fireMinder.IsFireStarted)
             {
-                Debug.WriteLine("Hold: Not ignited yet. Diverting to SMOKE mode.");
-                await Smoke();
-                return;
+               Debug.WriteLine("Hold: Not ignited yet. Diverting to SMOKE mode.");
+               await Smoke();
+               return;
             }
 
             if (_pid.SetPoint != _setPoint)

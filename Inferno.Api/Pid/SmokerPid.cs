@@ -31,7 +31,7 @@ namespace Inferno.Api.Pid
             double P = GainP() * error;
 
             TimeSpan dT = DateTime.Now - _lastUpdate;
-            _integral += error * dT.Seconds;
+            _integral += error * dT.TotalSeconds;
             _integral = _integral.Clamp(-IntegralMax(), IntegralMax());
             double I = GainI() * _integral;
 
