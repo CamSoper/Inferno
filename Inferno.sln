@@ -5,15 +5,9 @@ VisualStudioVersion = 16.0.29123.89
 MinimumVisualStudioVersion = 15.0.26124.0
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Inferno.Api", "Inferno.Api\Inferno.Api.csproj", "{D4477422-0421-4F19-A64B-729C9680E0BE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Inferno.Bot", "Inferno.Bot\Inferno.Bot.csproj", "{5C4B4827-456C-4A86-AFE2-7F7C0F96ACE1}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Inferno.TemperatureLogger", "Inferno.TemperatureLogger\Inferno.TemperatureLogger.csproj", "{CD52EC95-0E14-4CC4-9F7C-EB141E005649}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Inferno.Cli", "Inferno.Cli\Inferno.Cli.csproj", "{A0AA5E4B-1995-45F7-B7C1-3088B2E13002}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Inferno.Common", "Inferno.Common\Inferno.Common.csproj", "{AADA6360-ECE3-4176-AD5A-ED8E5D762841}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inferno.RelayListener", "Inferno.RelayListener\Inferno.RelayListener.csproj", "{EC48CDCD-1530-4DC4-B80E-C1611479445F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

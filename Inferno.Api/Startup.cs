@@ -17,7 +17,6 @@ namespace Inferno.Api
     {
         GpioController _gpio;
         SpiDevice _spi;
-        I2cDevice _i2c;
 
 
         public Startup(IConfiguration configuration)
