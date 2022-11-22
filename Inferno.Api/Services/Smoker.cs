@@ -1,8 +1,6 @@
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
+using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
 using Inferno.Api.Pid;
 using Inferno.Common.Extensions;
@@ -26,7 +24,7 @@ namespace Inferno.Api.Services
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
         TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
 
-        CancellationTokenSource _cts;
+        CancellationTokenSource _cts = null!;
         SmokerPid _pid;
         DateTime _lastPidUpdate;
         DateTime _lastModeChange;

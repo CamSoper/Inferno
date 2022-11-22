@@ -1,6 +1,6 @@
 using Inferno.Common.Models;
 
-namespace Inferno.Api.Interfaces
+namespace Inferno.Common.Interfaces
 {
     public interface ISmoker
     {

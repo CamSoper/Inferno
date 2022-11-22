@@ -1,8 +1,7 @@
-using System;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 using Inferno.Common.Extensions;
+using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
 
 namespace Inferno.Api.Services

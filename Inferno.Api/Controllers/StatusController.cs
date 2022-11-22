@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Inferno.Api.Interfaces;
+﻿using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
 using Microsoft.AspNetCore.Mvc;
 

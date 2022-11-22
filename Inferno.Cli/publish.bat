@@ -1,2 +1,2 @@
-dotnet publish
-scp -r .\bin\Debug\net5.0\publish\* pi@inferno:~/inferno/cli
+dotnet publish -c Debug
+scp -r .\bin\Debug\net7.0\publish\* pi@inferno:~/inferno/cli

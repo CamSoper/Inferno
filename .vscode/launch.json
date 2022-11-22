@@ -23,6 +23,24 @@
             }
         },
         {
+            "name": "Inferno CLI",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "~/.dotnet/dotnet",
+            "args": ["/home/pi/inferno/cli/Inferno.Cli.dll", "status"],
+            "cwd": "/home/pi/inferno/cli",
+            "stopAtEntry": true,
+            "console": "internalConsole",
+            "pipeTransport": {
+                "pipeCwd": "${workspaceFolder}",
+                "pipeProgram": "ssh",
+                "pipeArgs": [
+                    "pi@inferno"
+                ],
+                "debuggerPath": "/home/pi/vsdbg/vsdbg"
+            }
+        },
+        {
             "name": ".NET Core SSH Attach",
             "type": "coreclr",
             "request": "attach",
