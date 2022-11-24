@@ -80,7 +80,7 @@ namespace Inferno.Api.Services
             get => _pValue;            
             set
             {
-                _pValue = value.Clamp(0, 5);
+                _pValue = value.Clamp(1, 5);
             }
         }
         public Temps Temps => new Temps()

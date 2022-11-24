@@ -7,18 +7,12 @@ namespace Inferno.Common.Extensions
     {
         public static double Clamp(this double toClamp, double minValue, double maxValue)
         {
-            double returnValue = toClamp;
-            returnValue = Math.Max(returnValue, minValue);
-            returnValue = Math.Min(returnValue, maxValue);
-            return returnValue;
+            return double.Clamp(toClamp, minValue, maxValue);
         }
 
         public static int Clamp(this int toClamp, int minValue, int maxValue)
         {
-            int returnValue = toClamp;
-            returnValue = Math.Max(returnValue, minValue);
-            returnValue = Math.Min(returnValue, maxValue);
-            return returnValue;
+            return int.Clamp(toClamp, minValue, maxValue);
         }
 
         public static bool IsCookingMode(this SmokerMode mode)
