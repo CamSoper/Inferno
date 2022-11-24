@@ -10,5 +10,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Inferno.Common\Inferno.Common.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MQTTnet.Extensions.ManagedClient" Version="4.1.3.436" />
+  </ItemGroup>
   
 </Project>

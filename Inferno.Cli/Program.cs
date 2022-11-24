@@ -123,15 +123,15 @@ namespace Inferno.Cli
 
         static async Task SmokeMode()
         {
-            await _smokerProxy.SetMode(SmokerMode.Smoke);
+            await _smokerProxy.SetModeAsync(SmokerMode.Smoke);
         }
 
         static async Task Reset()
         {
             if (Confirm())
             {
-                await _smokerProxy.SetMode(SmokerMode.Shutdown);
-                await _smokerProxy.SetMode(SmokerMode.Ready);
+                await _smokerProxy.SetModeAsync(SmokerMode.Shutdown);
+                await _smokerProxy.SetModeAsync(SmokerMode.Ready);
             }
         }
 
@@ -151,26 +151,26 @@ namespace Inferno.Cli
 
         static async Task HoldMode(int setPoint)
         {
-            await _smokerProxy.SetMode(SmokerMode.Hold);
-            await _smokerProxy.SetSetPoint(setPoint);
+            await _smokerProxy.SetModeAsync(SmokerMode.Hold);
+            await _smokerProxy.SetSetPointAsync(setPoint);
         }
 
         static async Task PreheatMode(int setPoint)
         {
             
-            await _smokerProxy.SetSetPoint(setPoint);
+            await _smokerProxy.SetSetPointAsync(setPoint);
         }
 
         static async Task HandlePCommand(int? pValue = null)
         {
             if (pValue == null)
             {
-                var currentP = await _smokerProxy.GetPValue();
+                var currentP = await _smokerProxy.GetPValueAsync();
                 Console.WriteLine($"P-{currentP}");
             }
             else
             {
-                await _smokerProxy.SetPValue(pValue.Value);
+                await _smokerProxy.SetPValueAsync(pValue.Value);
             }
         }
 
@@ -178,7 +178,7 @@ namespace Inferno.Cli
         {
             if (Confirm())
             {
-                await _smokerProxy.SetMode(SmokerMode.Shutdown);
+                await _smokerProxy.SetModeAsync(SmokerMode.Shutdown);
             }
         }
 
@@ -201,7 +201,7 @@ namespace Inferno.Cli
 
         static async Task PrintStatus()
         {
-            SmokerStatus status = await _smokerProxy.GetStatus();
+            SmokerStatus status = await _smokerProxy.GetStatusAsync();
 
             Console.WriteLine($"Mode: {status.Mode}");
             Console.WriteLine($"Setpoint: {status.SetPoint}°F");

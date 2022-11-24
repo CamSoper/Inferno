@@ -20,36 +20,36 @@ namespace Inferno.Common.Proxies
 
         private bool disposedValue;
 
-        public async Task<SmokerStatus> GetStatus() 
+        public async Task<SmokerStatus> GetStatusAsync() 
         {
-            HttpResponseMessage result = await InfernoApiRequest(SmokerEndpoint.status);
+            HttpResponseMessage result = await InfernoApiRequestAsync(SmokerEndpoint.status);
             return JsonConvert.DeserializeObject<SmokerStatus>(await result.Content.ReadAsStringAsync()) ?? new SmokerStatus();
         }
 
-        public async Task SetSetPoint(int setPoint)
+        public async Task SetSetPointAsync(int setPoint)
         {
-            await InfernoApiRequest(SmokerEndpoint.setpoint, setPoint.ToString());
+            await InfernoApiRequestAsync(SmokerEndpoint.setpoint, setPoint.ToString());
         }
         
-        public async Task SetPValue(int pValue)
+        public async Task SetPValueAsync(int pValue)
         {
-            await InfernoApiRequest(SmokerEndpoint.pvalue, pValue.ToString());
+            await InfernoApiRequestAsync(SmokerEndpoint.pvalue, pValue.ToString());
         }
 
-        public async Task<int> GetPValue() 
+        public async Task<int> GetPValueAsync() 
         {
-            HttpResponseMessage result = await InfernoApiRequest(SmokerEndpoint.pvalue);
+            HttpResponseMessage result = await InfernoApiRequestAsync(SmokerEndpoint.pvalue);
             return int.Parse(await result.Content.ReadAsStringAsync());
         }
 
-        public async Task SetMode(SmokerMode smokerMode)
+        public async Task SetModeAsync(SmokerMode smokerMode)
         {
-            await InfernoApiRequest(SmokerEndpoint.mode, $"\"{smokerMode}\"");
+            await InfernoApiRequestAsync(SmokerEndpoint.mode, $"\"{smokerMode}\"");
         }
 
-        private async Task<HttpResponseMessage> InfernoApiRequest(SmokerEndpoint endpoint, string content = "")
+        private async Task<HttpResponseMessage> InfernoApiRequestAsync(SmokerEndpoint endpoint, string content = "")
         {
-            Uri requestUri = new Uri($"http://localhost:5000/api/{endpoint}");
+            Uri requestUri = new Uri($"http://inferno:5000/api/{endpoint}");
             HttpResponseMessage result;
 
             if (string.IsNullOrEmpty(content))

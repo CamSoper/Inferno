@@ -98,6 +98,7 @@ namespace Inferno.Api.Services
             FireHealthy = _fireMinder.IsFireHealthy,
             Mode = this.Mode.ToString(),
             SetPoint = _setPoint,
+            PValue = _pValue,
             ModeTime = _lastModeChange,
             CurrentTime = DateTime.Now
         };
@@ -134,6 +135,11 @@ namespace Inferno.Api.Services
             if (newMode == SmokerMode.Hold)
             {
                 _lastPidUpdate = DateTime.Now;
+            }
+
+            if (newMode == SmokerMode.Smoke)
+            {
+                _setPoint = _minSetPoint;
             }
 
             if (!newMode.IsCookingMode())
@@ -204,6 +210,8 @@ namespace Inferno.Api.Services
         private async Task Smoke()
         {
             _blower.On();
+
+
             TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
             await RunAuger(TimeSpan.FromSeconds(15), waitTime);
             if (_cts.IsCancellationRequested)
