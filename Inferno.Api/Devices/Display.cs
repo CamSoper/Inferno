@@ -11,9 +11,9 @@ namespace Inferno.Api.Devices
 {
     public class Display : IDisplay, IDisposable
     {
-        I2cDevice _i2c;
-        Pcf8574 _driver;
-        Lcd2004 _lcd;
+        I2cDevice _i2c = null!;
+        Pcf8574 _driver = null!;
+        Lcd2004 _lcd = null!;
 
         public Display()
         {

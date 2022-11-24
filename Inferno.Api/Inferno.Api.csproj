@@ -1,11 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Iot.Device.Bindings" Version="1.1.0-*" />
+    <PackageReference Include="IoT.Device.Bindings" Version="2.2.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,16 +1,15 @@
 ﻿using Inferno.Common.Models;
-using Newtonsoft.Json;
+using Inferno.Common.Proxies;
 using System;
 using System.Net.Http;
-using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Inferno.Cli
 {
     class Program
     {
-
+        static SmokerProxy _smokerProxy = new SmokerProxy();
+        
         static async Task Main(string[] args)
         {
             if(args == null || args.Length < 1)
@@ -19,7 +18,7 @@ namespace Inferno.Cli
                 return;
             }
 
-            Command command;
+            SmokerCommand command;
             if (!Enum.TryParse(args[0], true, out command))
             {
                 PrintHelp();
@@ -28,8 +27,8 @@ namespace Inferno.Cli
 
             switch(command)
             {
-                case Command.hold:
-                case Command.preheat:
+                case SmokerCommand.hold:
+                case SmokerCommand.preheat:
                     if (args.Length < 2)
                     {
                         PrintHelp();
@@ -43,7 +42,7 @@ namespace Inferno.Cli
                     }
                     else
                     {
-                        if (command == Command.hold)
+                        if (command == SmokerCommand.hold)
                         {
                             await HoldMode(setPoint);
                         }
@@ -55,7 +54,7 @@ namespace Inferno.Cli
                     }
                     break;
 
-                case Command.p:
+                case SmokerCommand.p:
                     if (args.Length > 1)
                     {
                         int pValue;
@@ -72,22 +71,22 @@ namespace Inferno.Cli
                     await HandlePCommand(null);
                     break;
 
-                case Command.shutdown:
+                case SmokerCommand.shutdown:
                     await ShutdownMode();
                     await PrintStatus();
                     break;
 
-                case Command.smoke:
+                case SmokerCommand.smoke:
                     await SmokeMode();
                     await PrintStatus();
                     break;
 
-                case Command.reset:
+                case SmokerCommand.reset:
                     await Reset();
                     await PrintStatus();
                     break;
 
-                case Command.status:
+                case SmokerCommand.status:
                     if(args.Length == 1)
                     {
                         await PrintStatus();
@@ -102,6 +101,8 @@ namespace Inferno.Cli
                     }
                     break;
             }
+
+            _smokerProxy.Dispose();
         }
 
         static void PrintHelp()
@@ -122,22 +123,22 @@ namespace Inferno.Cli
 
         static async Task SmokeMode()
         {
-            await SetMode(SmokerMode.Smoke);
+            await _smokerProxy.SetModeAsync(SmokerMode.Smoke);
         }
 
         static async Task Reset()
         {
             if (Confirm())
             {
-                await SetMode(SmokerMode.Shutdown);
-                await SetMode(SmokerMode.Ready);
+                await _smokerProxy.SetModeAsync(SmokerMode.Shutdown);
+                await _smokerProxy.SetModeAsync(SmokerMode.Ready);
             }
         }
 
         static bool Confirm()
         {
             Console.WriteLine("Are you sure? (y/n)");
-            var response = Console.ReadLine();
+            var response = Console.ReadLine() ?? string.Empty;
             if(response.Length < 1 ||
                 (!response.StartsWith("y", true, null) && 
                     !response.StartsWith("n", true, null)))
@@ -150,40 +151,34 @@ namespace Inferno.Cli
 
         static async Task HoldMode(int setPoint)
         {
-            await SetMode(SmokerMode.Hold);
-            await InfernoApiRequest(Endpoint.setpoint, setPoint.ToString());
+            await _smokerProxy.SetModeAsync(SmokerMode.Hold);
+            await _smokerProxy.SetSetPointAsync(setPoint);
         }
 
         static async Task PreheatMode(int setPoint)
         {
             
-            await InfernoApiRequest(Endpoint.setpoint, setPoint.ToString());
+            await _smokerProxy.SetSetPointAsync(setPoint);
         }
 
         static async Task HandlePCommand(int? pValue = null)
         {
             if (pValue == null)
             {
-                HttpResponseMessage result = await InfernoApiRequest(Endpoint.pvalue);
-                string currentP = await result.Content.ReadAsStringAsync();
+                var currentP = await _smokerProxy.GetPValueAsync();
                 Console.WriteLine($"P-{currentP}");
             }
             else
             {
-                await InfernoApiRequest(Endpoint.pvalue, $"{pValue}");
+                await _smokerProxy.SetPValueAsync(pValue.Value);
             }
-        }
-
-        static async Task SetMode(SmokerMode smokerMode)
-        {
-            await InfernoApiRequest(Endpoint.mode, $"\"{smokerMode}\"");
         }
 
         static async Task ShutdownMode()
         {
             if (Confirm())
             {
-                await SetMode(SmokerMode.Shutdown);
+                await _smokerProxy.SetModeAsync(SmokerMode.Shutdown);
             }
         }
 
@@ -206,58 +201,19 @@ namespace Inferno.Cli
 
         static async Task PrintStatus()
         {
-            HttpResponseMessage result = await InfernoApiRequest(Endpoint.status);
-
-            SmokerStatus status = JsonConvert.DeserializeObject<SmokerStatus>(await result.Content.ReadAsStringAsync());
+            SmokerStatus status = await _smokerProxy.GetStatusAsync();
 
             Console.WriteLine($"Mode: {status.Mode}");
-            Console.WriteLine($"Setpoint: {status.SetPoint}");
+            Console.WriteLine($"Setpoint: {status.SetPoint}°F");
             Console.WriteLine();
-            Console.WriteLine($"Grill temp: {status.Temps.GrillTemp}*F");
-            Console.WriteLine($"Probe temp: " + ((status.Temps.ProbeTemp > 0) ? status.Temps.ProbeTemp.ToString() + "*F" : "Unplugged"));
+            Console.WriteLine($"Grill temp: {status.Temps?.GrillTemp}°F");
+            Console.WriteLine($"Probe temp: " + ((status.Temps?.ProbeTemp > 0) ? status.Temps.ProbeTemp.ToString() + "°F" : "Unplugged"));
             Console.WriteLine();
-            Console.WriteLine($"Auger on: {status.AugerOn}");
-            Console.WriteLine($"Igniter on: {status.IgniterOn}");
-            Console.WriteLine($"Blower on: {status.BlowerOn}");
+            Console.Write($"🪵:{((status.AugerOn) ? "✅" : "❌")}|");
+            Console.Write($"🔥:{((status.IgniterOn) ? "✅" : "❌")}|");
+            Console.Write($"💨:{((status.BlowerOn) ? "✅" : "❌")}|");
+            Console.Write($"🚨:{((status.FireHealthy) ? "🙂" : "😮")}");
             Console.WriteLine();
-            Console.WriteLine($"Fire healthy: {status.FireHealthy}");
-        }
-
-        static async Task<HttpResponseMessage> InfernoApiRequest(Endpoint endpoint, string content = "")
-        {
-            Uri requestUri = new Uri($"http://localhost:5000/api/{endpoint}");
-            HttpClient client = new HttpClient();
-            HttpResponseMessage result;
-
-            if (string.IsNullOrEmpty(content))
-            {
-                result = await client.GetAsync(requestUri);
-            }
-            else
-            {
-                HttpContent requestBody = new StringContent($"{content}", Encoding.UTF8, "application/json");
-                result = await client.PostAsync(requestUri, requestBody);
-            }
-            result.EnsureSuccessStatusCode();
-            return result;
-        }
-        enum Endpoint
-        {
-            mode,
-            setpoint,
-            status,
-            pvalue
-        }
-
-        enum Command
-        {
-            smoke,
-            hold,
-            shutdown,
-            status,
-            reset,
-            p,
-            preheat
         }
     }
 }

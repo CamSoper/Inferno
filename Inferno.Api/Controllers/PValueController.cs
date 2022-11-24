@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Inferno.Api.Interfaces;
-using Microsoft.AspNetCore.Mvc;
-using Inferno.Common.Extensions;
+﻿using Microsoft.AspNetCore.Mvc;
+using Inferno.Common.Interfaces;
 
 namespace Inferno.Api.Controllers
 {

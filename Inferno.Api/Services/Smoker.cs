@@ -1,8 +1,6 @@
-using System;
 using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
+using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
 using Inferno.Api.Pid;
 using Inferno.Common.Extensions;
@@ -26,7 +24,7 @@ namespace Inferno.Api.Services
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
         TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
 
-        CancellationTokenSource _cts;
+        CancellationTokenSource _cts = null!;
         SmokerPid _pid;
         DateTime _lastPidUpdate;
         DateTime _lastModeChange;
@@ -100,6 +98,7 @@ namespace Inferno.Api.Services
             FireHealthy = _fireMinder.IsFireHealthy,
             Mode = this.Mode.ToString(),
             SetPoint = _setPoint,
+            PValue = _pValue,
             ModeTime = _lastModeChange,
             CurrentTime = DateTime.Now
         };
@@ -136,6 +135,11 @@ namespace Inferno.Api.Services
             if (newMode == SmokerMode.Hold)
             {
                 _lastPidUpdate = DateTime.Now;
+            }
+
+            if (newMode == SmokerMode.Smoke)
+            {
+                _setPoint = _minSetPoint;
             }
 
             if (!newMode.IsCookingMode())
@@ -206,6 +210,8 @@ namespace Inferno.Api.Services
         private async Task Smoke()
         {
             _blower.On();
+
+
             TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
             await RunAuger(TimeSpan.FromSeconds(15), waitTime);
             if (_cts.IsCancellationRequested)

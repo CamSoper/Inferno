@@ -11,19 +11,16 @@ namespace Inferno.Api.Devices
         int _pin;
         internal string _relayDescription = "Relay";
 
-        public bool IsOn => _gpio.IsPinOpen(_pin);
+        public bool IsOn => _gpio.IsPinOpen(_pin) && _gpio.Read(_pin) == PinValue.Low;
 
         public RelayDevice(GpioController gpio, int pin)
         {
             _gpio = gpio;
             _pin = pin;
 
-            // Ensure the pin is closed so the
-            // relay is off.            
-            if(_gpio.IsPinOpen(_pin))
-            {
-                _gpio.ClosePin(_pin);
-            }
+            _gpio.OpenPin(_pin, PinMode.Output);
+            // ensure the relay is off
+            _gpio.Write(_pin, PinValue.High);
         }
 
         public void On()
@@ -31,7 +28,7 @@ namespace Inferno.Api.Devices
             if (!IsOn)
             {
                 Debug.WriteLine($"{_relayDescription} ON.");
-                _gpio.OpenPin(_pin, PinMode.Output);
+                _gpio.Write(_pin, PinValue.Low);
             }
         }
 
@@ -40,7 +37,7 @@ namespace Inferno.Api.Devices
             if (IsOn)
             {
                 Debug.WriteLine($"{_relayDescription} OFF.");
-                _gpio.ClosePin(_pin);
+                _gpio.Write(_pin, PinValue.High);
             }
         }
 
@@ -56,6 +53,7 @@ namespace Inferno.Api.Devices
                 {
                     if(_gpio.IsPinOpen(_pin))
                     {
+                        _gpio.Write(_pin, PinValue.High);
                         _gpio.ClosePin(_pin);
                     }
                 }
