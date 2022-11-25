@@ -49,7 +49,7 @@ namespace Inferno.Common.Proxies
 
         private async Task<HttpResponseMessage> InfernoApiRequestAsync(SmokerEndpoint endpoint, string content = "")
         {
-            Uri requestUri = new Uri($"http://inferno:5000/api/{endpoint}");
+            Uri requestUri = new Uri($"http://localhost:5000/api/{endpoint}");
             HttpResponseMessage result;
 
             if (string.IsNullOrEmpty(content))
