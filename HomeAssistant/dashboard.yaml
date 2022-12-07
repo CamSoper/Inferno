@@ -1,0 +1,87 @@
+  - title: Inferno
+    theme: Backend-selected
+    path: inferno
+    icon: mdi:grill
+    badges: []
+    cards:
+      - type: vertical-stack
+        cards:
+          - square: false
+            columns: 2
+            type: grid
+            cards:
+              - type: entity
+                entity: sensor.smoker_mode
+                name: Mode
+              - type: entity
+                entity: number.smoker_setpoint
+                name: Setpoint
+              - type: entity
+                entity: sensor.smoker_grill_temp
+                name: Grill
+              - type: conditional
+                conditions:
+                  - entity: sensor.smoker_probe_temp
+                    state_not: '-1'
+                card:
+                  type: entity
+                  entity: sensor.smoker_probe_temp
+                  name: Probe
+              - type: conditional
+                conditions:
+                  - entity: sensor.smoker_probe_temp
+                    state: '-1'
+                card:
+                  type: entity
+                  entity: input_text.smoker_probe_unplugged
+                  name: Probe
+          - type: entities
+            entities:
+              - entity: number.smoker_setpoint
+                name: Select Setpoint
+                secondary_info: none
+              - entity: select.smoker_mode_selector
+                name: Select Mode
+          - type: conditional
+            conditions:
+              - entity: sensor.smoker_probe_temp
+                state_not: '-1'
+            card:
+              type: history-graph
+              entities:
+                - entity: number.smoker_setpoint
+                  name: Setpoint
+                - entity: sensor.smoker_grill_temp
+                  name: Grill
+                - entity: sensor.smoker_probe_temp
+                  name: Probe
+                - entity: sensor.smoker_mode
+                  name: Mode
+              hours_to_show: 1
+          - type: conditional
+            conditions:
+              - entity: sensor.smoker_probe_temp
+                state: '-1'
+            card:
+              type: history-graph
+              entities:
+                - entity: number.smoker_setpoint
+                  name: Setpoint
+                - entity: sensor.smoker_grill_temp
+                  name: Grill
+                - entity: sensor.smoker_mode
+                  name: Mode
+              hours_to_show: 1
+          - show_name: true
+            show_icon: true
+            show_state: false
+            type: glance
+            entities:
+              - entity: binary_sensor.smoker_auger
+                name: Auger
+              - entity: binary_sensor.smoker_igniter
+                name: Igniter
+              - entity: binary_sensor.smoker_blower
+                name: Blower
+              - entity: binary_sensor.smoker_fire_healthy
+                name: Fire Health
