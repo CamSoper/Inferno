@@ -26,6 +26,9 @@ namespace Inferno.Api.Pid
 
         public double GetControlVariable(double currentTemp)
         {
+            if (double.IsNaN(currentTemp))
+                return 0;
+
             double error = currentTemp - SetPoint;
             
             double P = GainP() * error;

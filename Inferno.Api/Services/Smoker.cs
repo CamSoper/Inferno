@@ -195,7 +195,7 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    string errorText = $"Mode loop exception! {ex} {ex.StackTrace}";
+                    string errorText = $"{DateTime.Now} Mode loop exception! {ex} {ex.StackTrace}";
                     Console.WriteLine(errorText);
                     Debug.WriteLine(errorText);
                 }
@@ -241,6 +241,12 @@ namespace Inferno.Api.Services
             }
 
             double u = _pid.GetControlVariable(_rtdArray.GrillTemp).Clamp(_uMin, _uMax);
+            if(double.IsNaN(u))
+            {
+                Debug.WriteLine($"Hold: PID returned NaN. Setting u to {_uMin}.");
+                u = _uMin;
+            }
+            
             TimeSpan runTime = u * _holdCycle;
             if (runTime == _holdCycle)
             {

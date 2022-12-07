@@ -33,8 +33,20 @@ namespace Inferno.Api.Devices
         {
             while (true)
             {
-                int grillValue = _adc.Read(0);
-                int probeValue = _adc.Read(1);
+                int grillValue;
+                int probeValue;
+                
+                try
+                {
+                    grillValue = _adc.Read(0);
+                    probeValue = _adc.Read(1);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"{DateTime.Now} {ex.Message} {ex.StackTrace}");
+                    await Task.Delay(TimeSpan.FromMilliseconds(10));
+                    continue;
+                }
 
                 _grillResistances.Enqueue(CalculateResistanceFromAdc(grillValue));
                 _probeResistances.Enqueue(CalculateResistanceFromAdc(probeValue));

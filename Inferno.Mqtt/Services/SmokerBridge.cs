@@ -194,24 +194,26 @@ namespace Inferno.Mqtt.Services
                                             forceUpdate);
 
                     // Only update the grill/probe temps every 5 iterations
-                    if (iteration == 0)
+                    if (iteration == 0 && status.Temps is not null)
                     {
                         if (_lastGrillTemp != status.Temps?.GrillTemp)
                         {
-                            await SendUpdateMessage(status.Temps?.GrillTemp.ToString() ?? "-1",
-                                                _lastGrillTemp.ToString(),
-                                                TOPIC_GRILLTEMP,
-                                                forceUpdate);
-                            _lastGrillTemp = status.Temps?.GrillTemp ?? -1;
+                            double grillTemp = status.Temps?.GrillTemp ?? -1;
+                            await SendUpdateMessage(grillTemp.ToString(),
+                                                    _lastGrillTemp.ToString(),
+                                                    TOPIC_GRILLTEMP,
+                                                    forceUpdate);
+                            _lastGrillTemp = grillTemp;
                         }
                         
                         if(_lastProbeTemp != status.Temps?.ProbeTemp)
                         {
-                            await SendUpdateMessage(status.Temps?.ProbeTemp.ToString() ?? "-1",
+                            double probeTemp = status.Temps?.ProbeTemp ?? -1;
+                            await SendUpdateMessage(probeTemp.ToString(),
                                                 _lastProbeTemp.ToString(),
                                                 TOPIC_PROBETEMP,
                                                 forceUpdate);
-                            _lastProbeTemp = status.Temps?.ProbeTemp ?? -1;
+                            _lastProbeTemp = probeTemp;
                         }
                     }
 
@@ -225,14 +227,14 @@ namespace Inferno.Mqtt.Services
                     {
                         iteration++;
                     }
-
-                    await Task.Delay(1000);
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"{DateTime.Now} Error in StateLoop: {ex}");
                     iteration = 0;
                 }
+                
+                await Task.Delay(1000);
             }
         }
 

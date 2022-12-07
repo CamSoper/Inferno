@@ -13,6 +13,7 @@ namespace Inferno.Api.Services
         Task _fireMinderLoop;
         TimeSpan _igniterTimeout = TimeSpan.FromMinutes(10);
         TimeSpan _fireTimeout = TimeSpan.FromMinutes(10);
+        TimeSpan _reigniteWait = TimeSpan.FromMinutes(1);
         DateTime _igniterOnTime;
         bool _fireCheck;
         DateTime _fireCheckTime;
@@ -43,11 +44,7 @@ namespace Inferno.Api.Services
             }
             else
             {
-                // ToDo: Add event to Smoker that raises during a setpoint increase
-                // Then change this method so that we return the following, but NOT
-                // immediately after a SetPoint increase...
-                //return _smoker.SetPoint - (_smoker.SetPoint / 180 * 30);
-                return 160;
+                return _smoker.SetPoint - (_smoker.SetPoint / 180 * 30);
             }
         }
 
@@ -62,6 +59,7 @@ namespace Inferno.Api.Services
                         _smoker.Temps.GrillTemp < _ignitionTemp &&
                         !_fireStarted)
                     {
+                        // The fire is not started, turn on the igniter
                         if (!_igniter.IsOn)
                         {
                             _igniter.On();
@@ -69,14 +67,12 @@ namespace Inferno.Api.Services
                             _igniterOnTime = DateTime.Now;
                         }
                     }
-                    else
-                    {
-                        _igniter.Off();
-                    }
 
-                    if (_igniter.IsOn && DateTime.Now - _igniterOnTime > _igniterTimeout)
+                    if (_igniter.IsOn && 
+                        DateTime.Now - _igniterOnTime > _igniterTimeout)
                     {
-                        string errorText = "Igniter timeout. Setting error mode.";
+                        // The igniter has been on for too long, shut it off and go to error mode
+                        string errorText = $"{DateTime.Now} Igniter timeout. Setting error mode.";
                         Debug.WriteLine(errorText);
                         Console.WriteLine(errorText);
                         _igniter.Off();
@@ -87,26 +83,40 @@ namespace Inferno.Api.Services
                     {
                         if(_smoker.Temps.GrillTemp >= _ignitionTemp)
                         {
+                            // The fire has started, make sure the igniter is off
                             _fireStarted = true;
+                            _igniter.Off();
                         }
 
-                        if (_fireStarted && _smoker.Temps.GrillTemp < GetFireCheckTemp() && !_fireCheck)
+                        if (_fireStarted &&
+                                _smoker.Temps.GrillTemp < GetFireCheckTemp() &&
+                                !_fireCheck)
                         {
+                            // The fire might be going out, keep an eye on it
                             _fireCheck = true;
-                            if (!_igniter.IsOn)
-                            {
-                                _igniter.On();
-                            }
                             _fireCheckTime = DateTime.Now;
+                        }
+                        else if (_fireStarted && 
+                                    _smoker.Temps.GrillTemp < GetFireCheckTemp() && 
+                                    _fireCheck && 
+                                    DateTime.Now - _fireCheckTime > _reigniteWait &&
+                                    !_igniter.IsOn)
+                        {
+                            // The fire has been going out for a while, try to reignite
+                            _igniter.On();
+                            _ignitionTemp = Convert.ToInt32(_smoker.Temps.GrillTemp) + 5;
+                            _igniterOnTime = DateTime.Now;
                         }
                         else if (_fireCheck && _smoker.Temps.GrillTemp >= GetFireCheckTemp())
                         {
-                            _igniter.Off();
+                            // The fire is healthy again
+                            _igniter.Off(); // This is probably not needed, but just in case
                             _fireCheck = false;
                         }
                         else if (_fireCheck && DateTime.Now - _fireCheckTime > _fireTimeout)
                         {
-                            string errorText = "Fire timeout. Setting error mode.";
+                            // The fire is out, give up and go to error mode
+                            string errorText = $"{DateTime.Now} Fire timeout. Setting error mode.";
                             Debug.WriteLine(errorText);
                             Console.WriteLine(errorText);
                             _smoker.SetMode(SmokerMode.Error);
@@ -117,7 +127,7 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    string errorText = $"Fire Minder loop exception! {ex} {ex.StackTrace}";
+                    string errorText = $"{DateTime.Now} Fire Minder loop exception! {ex} {ex.StackTrace}";
                     Console.WriteLine(errorText);
                     Debug.WriteLine(errorText);
                 }
