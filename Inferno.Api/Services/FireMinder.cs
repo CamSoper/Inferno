@@ -19,6 +19,7 @@ namespace Inferno.Api.Services
         DateTime _fireCheckTime;
         bool _fireStarted;
         int _ignitionTemp=200;
+        bool _preheating = true;
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
@@ -34,6 +35,7 @@ namespace Inferno.Api.Services
         {
             _fireStarted = false;
             _fireCheck = false;
+            _preheating = true;
         }
 
         public int GetFireCheckTemp()
@@ -68,8 +70,17 @@ namespace Inferno.Api.Services
                         }
                     }
 
+                    if (_smoker.Mode.IsCookingMode() &&
+                        _smoker.Temps.GrillTemp > GetFireCheckTemp() &&
+                        _fireStarted &&
+                        _preheating)
+                    {
+                        // The fire has started and is preheated
+                        _preheating = false;
+                    }
+
                     if (_igniter.IsOn && 
-                        DateTime.Now - _igniterOnTime > _igniterTimeout)
+                            DateTime.Now - _igniterOnTime > _igniterTimeout)
                     {
                         // The igniter has been on for too long, shut it off and go to error mode
                         string errorText = $"{DateTime.Now} Igniter timeout. Setting error mode.";
@@ -89,6 +100,7 @@ namespace Inferno.Api.Services
                         }
 
                         if (_fireStarted &&
+                                !_preheating &&
                                 _smoker.Temps.GrillTemp < GetFireCheckTemp() &&
                                 !_fireCheck)
                         {
