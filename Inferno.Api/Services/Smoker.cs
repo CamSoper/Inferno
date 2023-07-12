@@ -30,7 +30,7 @@ namespace Inferno.Api.Services
         DateTime _lastModeChange;
  
         double _uMax = 1.0;
-        double _uMin = 0.15;
+        double _uMin = 0.2;
 
         Task _modeLoopTask;
         DisplayUpdater _displayUpdater;
@@ -227,9 +227,9 @@ namespace Inferno.Api.Services
         {
             _blower.On();
 
-            if (!_fireMinder.IsFireStarted)
+            if (_igniter.IsOn)
             {
-               Debug.WriteLine("Hold: Not ignited yet. Diverting to SMOKE mode.");
+               Debug.WriteLine("Hold: Igniter is on. Diverting to SMOKE mode.");
                await Smoke();
                return;
             }

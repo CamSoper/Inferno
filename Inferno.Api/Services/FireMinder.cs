@@ -18,8 +18,8 @@ namespace Inferno.Api.Services
         bool _fireCheck;
         DateTime _fireCheckTime;
         bool _fireStarted;
-        int _ignitionTemp=200;
-        bool _preheating = true;
+        int _ignitionTemp;
+        bool _initialIgnition;
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
@@ -33,9 +33,11 @@ namespace Inferno.Api.Services
 
         public void ResetFireStatus()
         {
+            Debug.WriteLine("Resetting fire status.");
             _fireStarted = false;
             _fireCheck = false;
-            _preheating = true;
+            _initialIgnition = true;
+            _ignitionTemp = 200;
         }
 
         public int GetFireCheckTemp()
@@ -53,6 +55,7 @@ namespace Inferno.Api.Services
         private async Task FireMinderLoop()
         {
             Debug.WriteLine("Starting Fire Minder thread.");
+            ResetFireStatus();
             while (true)
             {
                 try
@@ -73,10 +76,10 @@ namespace Inferno.Api.Services
                     if (_smoker.Mode.IsCookingMode() &&
                         _smoker.Temps.GrillTemp > GetFireCheckTemp() &&
                         _fireStarted &&
-                        _preheating)
+                        _initialIgnition)
                     {
-                        // The fire has started and is preheated
-                        _preheating = false;
+                        // The fire has been lit at least once.
+                        _initialIgnition = false;
                     }
 
                     if (_igniter.IsOn && 
@@ -100,7 +103,7 @@ namespace Inferno.Api.Services
                         }
 
                         if (_fireStarted &&
-                                !_preheating &&
+                                !_initialIgnition &&
                                 _smoker.Temps.GrillTemp < GetFireCheckTemp() &&
                                 !_fireCheck)
                         {
