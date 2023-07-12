@@ -22,7 +22,7 @@ namespace Inferno.Api.Services
         int _minSetPoint = 180;
 
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
-        TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
+        TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
 
         CancellationTokenSource _cts = null!;
         SmokerPid _pid;
@@ -30,7 +30,7 @@ namespace Inferno.Api.Services
         DateTime _lastModeChange;
  
         double _uMax = 1.0;
-        double _uMin = 0.2;
+        double _uMin = 0.175;
 
         Task _modeLoopTask;
         DisplayUpdater _displayUpdater;
