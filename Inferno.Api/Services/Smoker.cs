@@ -18,7 +18,7 @@ namespace Inferno.Api.Services
 
         int _setPoint;
         int _pValue;
-        int _maxSetPoint = 450;
+        int _maxSetPoint = 400;
         int _minSetPoint = 180;
 
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
@@ -232,6 +232,13 @@ namespace Inferno.Api.Services
                Debug.WriteLine("Hold: Igniter is on. Diverting to SMOKE mode.");
                await Smoke();
                return;
+            }
+
+            if (_setPoint == _maxSetPoint && _rtdArray.GrillTemp <= _setPoint)
+            {
+                Debug.WriteLine("Hold: Max setting. Skipping the PID, just running the auger.");
+                await RunAuger();
+                return;
             }
 
             if (_pid.SetPoint != _setPoint)
