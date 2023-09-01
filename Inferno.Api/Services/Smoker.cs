@@ -234,7 +234,7 @@ namespace Inferno.Api.Services
                return;
             }
 
-            if (_setPoint == _maxSetPoint && _rtdArray.GrillTemp <= _setPoint)
+            if (_setPoint == _maxSetPoint && _rtdArray.GrillTemp < _setPoint)
             {
                 Debug.WriteLine("Hold: Max setting. Skipping the PID, just running the auger.");
                 await RunAuger();
