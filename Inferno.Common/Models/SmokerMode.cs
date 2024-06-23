@@ -5,7 +5,7 @@ namespace Inferno.Common.Models
         Ready,
         Smoke,
         Hold,
-        Preheat,
+        Seer,
         Shutdown,
         Error
     }

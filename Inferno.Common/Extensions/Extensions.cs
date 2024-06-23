@@ -19,7 +19,7 @@ namespace Inferno.Common.Extensions
         {
             if (mode == SmokerMode.Smoke ||
                 mode == SmokerMode.Hold ||
-                mode == SmokerMode.Preheat)
+                mode == SmokerMode.Seer)
             {
                 return true;
             }

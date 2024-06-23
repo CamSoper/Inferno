@@ -21,6 +21,8 @@ namespace Inferno.Api.Services
         int _maxSetPoint = 400;
         int _minSetPoint = 180;
 
+        int _maxGrillTemp = 450;
+
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
         TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
 
@@ -142,6 +144,11 @@ namespace Inferno.Api.Services
                 _setPoint = _minSetPoint;
             }
 
+            if (newMode == SmokerMode.Seer)
+            {
+                _setPoint = _maxSetPoint;
+            }
+
             if (!newMode.IsCookingMode())
             {
                 SetPoint = _minSetPoint;
@@ -179,8 +186,8 @@ namespace Inferno.Api.Services
                                 await Hold();
                                 break;
 
-                            case SmokerMode.Preheat:
-                                await Preheat();
+                            case SmokerMode.Seer:
+                                await Seer();
                                 break;
 
                             case SmokerMode.Smoke:
@@ -227,9 +234,9 @@ namespace Inferno.Api.Services
         {
             _blower.On();
 
-            if (_igniter.IsOn)
+            if (_igniter.IsOn && !_fireMinder.IsFireStarted)
             {
-               Debug.WriteLine("Hold: Igniter is on. Diverting to SMOKE mode.");
+               Debug.WriteLine("Hold: Igniter is on during startup. Diverting to SMOKE mode.");
                await Smoke();
                return;
             }
@@ -311,9 +318,24 @@ namespace Inferno.Api.Services
         /// Traeger factory algorithm for cooking. 
         /// Generally should not be used. Use Hold instead.
         ///</summary>
-        private Task Preheat()
+        private async Task Seer()
         {
-            throw new NotImplementedException();
+            if (_igniter.IsOn && !_fireMinder.IsFireStarted)
+            {
+               Debug.WriteLine("Seer: Igniter is on during startup. Diverting to SMOKE mode.");
+               await Smoke();
+               return;
+            }
+
+            if (_rtdArray.GrillTemp < _maxGrillTemp)
+            {
+                await RunAuger();
+            }
+            else
+            {
+                Debug.WriteLine($"Seer: Over max grill temp, stopping auger.");
+                await Task.Delay(_holdCycle);
+            }
         }
 
         ///<summary>
@@ -326,14 +348,14 @@ namespace Inferno.Api.Services
             _igniter.Off();
             try
             {
-                await Task.Delay(_shutdownBlowerTimeout, _cts.Token);
-                if (_mode == SmokerMode.Error)
+                if (DateTime.Now - _lastModeChange < _shutdownBlowerTimeout)
                 {
-                    _blower.Off();
-                    Debug.WriteLine("Error mode: Waiting indefinitely for operator to manually set mode to READY.");
-                    await Task.Delay(TimeSpan.FromMilliseconds(-1), _cts.Token);
+                    await Task.Delay(TimeSpan.FromSeconds(1), _cts.Token);
                 }
-                SetMode(SmokerMode.Ready);
+                else
+                {
+                    SetMode(SmokerMode.Ready);
+                }
             }
             catch (TaskCanceledException ex)
             {
