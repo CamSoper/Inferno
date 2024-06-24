@@ -8,6 +8,6 @@ namespace Inferno.Common.Models
         status,
         reset,
         p,
-        preheat
+        sear
     }
 }

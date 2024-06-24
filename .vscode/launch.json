@@ -5,10 +5,10 @@
    "version": "0.2.0",
    "configurations": [
         {
-            "name": ".NET Core Launch (remote console)",
+            "name": "Inferno API (remote)",
             "type": "coreclr",
             "request": "launch",
-            "program": "/home/pi/inferno/Inferno.Api",
+            "program": "/home/pi/inferno/Inferno.Api.dll",
             "args": [],
             "cwd": "/home/pi/inferno",
             "stopAtEntry": false,

@@ -28,7 +28,6 @@ namespace Inferno.Cli
             switch(command)
             {
                 case SmokerCommand.hold:
-                case SmokerCommand.preheat:
                     if (args.Length < 2)
                     {
                         PrintHelp();
@@ -42,14 +41,7 @@ namespace Inferno.Cli
                     }
                     else
                     {
-                        if (command == SmokerCommand.hold)
-                        {
-                            await HoldMode(setPoint);
-                        }
-                        else
-                        {
-                            await PreheatMode(setPoint);
-                        }
+                        await HoldMode(setPoint);
                         await PrintStatus();
                     }
                     break;
@@ -78,6 +70,11 @@ namespace Inferno.Cli
 
                 case SmokerCommand.smoke:
                     await SmokeMode();
+                    await PrintStatus();
+                    break;
+
+                case SmokerCommand.sear:
+                    await SearMode();
                     await PrintStatus();
                     break;
 
@@ -112,7 +109,7 @@ namespace Inferno.Cli
             Console.WriteLine("");
             Console.WriteLine("Smoke mode: inferno smoke");
             Console.WriteLine("Hold mode: inferno hold nnn (where nnn is a temperature)");
-            Console.WriteLine("Preheat mode: inferno preheat nnn (where nnn is a temperature)");
+            Console.WriteLine("Sear mode: inferno sear");
             Console.WriteLine("Shutdown mode: inferno shutdown");
             Console.WriteLine("Force ready mode: inferno reset");
             Console.WriteLine("Display P-Value: inferno p");
@@ -155,10 +152,9 @@ namespace Inferno.Cli
             await _smokerProxy.SetSetPointAsync(setPoint);
         }
 
-        static async Task PreheatMode(int setPoint)
+        static async Task SearMode()
         {
-            
-            await _smokerProxy.SetSetPointAsync(setPoint);
+            await _smokerProxy.SetModeAsync(SmokerMode.Sear);
         }
 
         static async Task HandlePCommand(int? pValue = null)

@@ -50,7 +50,7 @@ namespace Inferno.Api.Services
                             _display.DisplayInfo(_smoker.Temps, $"Shutdown: Fire fault", "");
                             break;
 
-                        case SmokerMode.Seer:
+                        case SmokerMode.Sear:
                             _display.DisplayInfo(_smoker.Temps, $"{_smoker.Mode}", HardwareStatus());
                             break;
                             

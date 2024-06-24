@@ -315,8 +315,7 @@ namespace Inferno.Api.Services
 
 
         ///<summary>
-        /// Traeger factory algorithm for cooking. 
-        /// Generally should not be used. Use Hold instead.
+        /// Burn hot
         ///</summary>
         private async Task Seer()
         {
