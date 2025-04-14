@@ -17,21 +17,40 @@ namespace Inferno.Api.Services
         IDisplay _display;
 
         int _setPoint;
+        /// <summary>
+        /// Arbitrary factor to determine how much to run the auger each cycle in Smoke mode.
+        /// Borrowed from Traeger's "P" setting. 1 is the lowest, 5 is the highest.
+        /// </summary>
         int _pValue;
         int _maxSetPoint = 400;
         int _minSetPoint = 180;
 
-        int _maxGrillTemp = 450;
+        int _maxGrillTemp = 425;
 
+        /// <summary>
+        /// Timeout for the blower to run after shutdown.
+        /// </summary>
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
+        
+        /// <summary>
+        /// Hold cycle time. This is the amount of time a Hold iteration takes in total.
+        /// The PID determines a period of time to run the auger as a percentage of this time.
+        /// Also used in Sear mode to determine how long to run the auger when the grill is too hot.
+        /// </summary>
         TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
 
         CancellationTokenSource _cts = null!;
         SmokerPid _pid;
-        DateTime _lastPidUpdate;
         DateTime _lastModeChange;
  
+        /// <summary>
+        /// Maximum value for the PID output. This is the maximum amount of the "hold" cycle time that the auger will run.
+        /// </summary>
         double _uMax = 1.0;
+        /// <summary>
+        /// Minimum value for the PID output. This is the minimum amount of the "hold" cycle time that the auger will run.
+        /// Too low of a value can cause the fire to go out. Too high of a value can result in the fire being too hot.
+        /// </summary>
         double _uMin = 0.175;
 
         Task _modeLoopTask;
@@ -134,17 +153,12 @@ namespace Inferno.Api.Services
                 _fireMinder.ResetFireStatus();
             }
 
-            if (newMode == SmokerMode.Hold)
-            {
-                _lastPidUpdate = DateTime.Now;
-            }
-
             if (newMode == SmokerMode.Smoke)
             {
                 _setPoint = _minSetPoint;
             }
 
-            if (newMode == SmokerMode.Seer)
+            if (newMode == SmokerMode.Sear)
             {
                 _setPoint = _maxSetPoint;
             }
@@ -186,8 +200,8 @@ namespace Inferno.Api.Services
                                 await Hold();
                                 break;
 
-                            case SmokerMode.Seer:
-                                await Seer();
+                            case SmokerMode.Sear:
+                                await Sear();
                                 break;
 
                             case SmokerMode.Smoke:
@@ -317,11 +331,11 @@ namespace Inferno.Api.Services
         ///<summary>
         /// Burn hot
         ///</summary>
-        private async Task Seer()
+        private async Task Sear()
         {
             if (_igniter.IsOn && !_fireMinder.IsFireStarted)
             {
-               Debug.WriteLine("Seer: Igniter is on during startup. Diverting to SMOKE mode.");
+               Debug.WriteLine("Sear: Igniter is on during startup. Diverting to SMOKE mode.");
                await Smoke();
                return;
             }
@@ -332,8 +346,9 @@ namespace Inferno.Api.Services
             }
             else
             {
-                Debug.WriteLine($"Seer: Over max grill temp, stopping auger.");
-                await Task.Delay(_holdCycle);
+                Debug.WriteLine($"Sear: Over max grill temp. Running minimum auger time.");
+                var runTime = _holdCycle * _uMin;
+                await RunAuger(runTime, _holdCycle - runTime);
             }
         }
 
