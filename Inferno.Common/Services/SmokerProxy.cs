@@ -11,11 +11,13 @@ namespace Inferno.Common.Proxies
     public class SmokerProxy : IDisposable
     {
 
-        private HttpClient _client;
+        private readonly HttpClient _client;
+        private readonly string _baseUrl;
 
-        public SmokerProxy()
+        public SmokerProxy(string baseUrl)
         {
             _client = new HttpClient();
+            _baseUrl = baseUrl.TrimEnd('/');
         }
 
         private bool disposedValue;
@@ -49,7 +51,7 @@ namespace Inferno.Common.Proxies
 
         private async Task<HttpResponseMessage> InfernoApiRequestAsync(SmokerEndpoint endpoint, string content = "")
         {
-            Uri requestUri = new Uri($"http://127.0.0.1:5000/api/{endpoint}");
+            Uri requestUri = new Uri($"{_baseUrl}/api/{endpoint}");
             HttpResponseMessage result;
 
             if (string.IsNullOrEmpty(content))

@@ -10,19 +10,7 @@ namespace Inferno.Mqtt.Services
     public sealed class SmokerBridge : IDisposable
     {
 
-        private const string TOPIC_ROOT = "inferno";
-        private const string TOPIC_COMMAND = "command";
-        private const string TOPIC_STATE = "state";
-        private const string TOPIC_MODE = "mode";
-        private const string TOPIC_SETPOINT = "setpoint";
-        private const string TOPIC_PVALUE = "pvalue";
-        private const string TOPIC_GRILLTEMP = "grill";
-        private const string TOPIC_PROBETEMP = "probe";
-        private const string TOPIC_AUGER = "auger";
-        private const string TOPIC_BLOWER = "blower";
-        private const string TOPIC_IGNITER = "igniter";
-        private const string TOPIC_FIREHEALTHY = "firehealthy";
-
+        private readonly MqttSettings _settings;
 
         private readonly string _brokerAddress;
         private readonly string _brokerUsername;
@@ -37,23 +25,25 @@ namespace Inferno.Mqtt.Services
         private readonly SmokerProxy _proxy;
 
         private bool disposedValue;
-    
 
-        public SmokerBridge()
+
+        public SmokerBridge(MqttSettings settings, string apiBaseUrl)
         {
-            _brokerAddress = Environment.GetEnvironmentVariable("MQTT_BROKER_ADDRESS") ?? "localhost";
-            _brokerUsername = Environment.GetEnvironmentVariable("MQTT_USERNAME") ?? "";
-            _brokerPassword = Environment.GetEnvironmentVariable("MQTT_PASSWORD") ?? "";
+            _settings = settings;
+
+            _brokerAddress = settings.BrokerAddress;
+            _brokerUsername = settings.BrokerUsername;
+            _brokerPassword = settings.BrokerPassword;
 
             Console.WriteLine($"Broker Address: {_brokerAddress}");
             Console.WriteLine($"Broker Username: {_brokerUsername}");
 
-            _proxy = new SmokerProxy();
+            _proxy = new SmokerProxy(apiBaseUrl);
         }
 
-        public static async Task<SmokerBridge> CreateAsync()
+        public static async Task<SmokerBridge> CreateAsync(MqttSettings settings, string apiBaseUrl)
         {
-            var smokerBridge = new SmokerBridge();
+            var smokerBridge = new SmokerBridge(settings, apiBaseUrl);
             await smokerBridge.InitializeAsync();
             return smokerBridge;
         }
@@ -80,17 +70,17 @@ namespace Inferno.Mqtt.Services
                 .WithTopicFilter(
                     f =>
                     {
-                        f.WithTopic(GetCommandTopic(TOPIC_MODE));
+                        f.WithTopic(GetCommandTopic(_settings.TopicMode));
                     })
                 .WithTopicFilter(
                     f =>
                     {
-                        f.WithTopic(GetCommandTopic(TOPIC_SETPOINT));
+                        f.WithTopic(GetCommandTopic(_settings.TopicSetPoint));
                     })
                 .WithTopicFilter(
                     f =>
                     {
-                        f.WithTopic(GetCommandTopic(TOPIC_PVALUE));
+                        f.WithTopic(GetCommandTopic(_settings.TopicPValue));
                     })
                 .Build();
 
@@ -107,21 +97,21 @@ namespace Inferno.Mqtt.Services
             var payload = Encoding.UTF8.GetString(args.ApplicationMessage.Payload);
             Console.WriteLine($"{DateTime.Now} Received on {topic}: {payload}");
 
-            if (topic == SmokerBridge.GetCommandTopic(TOPIC_MODE))
+            if (topic == GetCommandTopic(_settings.TopicMode))
             {
                 if (Enum.TryParse(payload, true, out SmokerMode mode))
                 {
                     await _proxy.SetModeAsync(mode);
                 }
             }
-            else if (topic == SmokerBridge.GetCommandTopic(TOPIC_SETPOINT))
+            else if (topic == GetCommandTopic(_settings.TopicSetPoint))
             {
                 if (int.TryParse(payload, out var setPoint))
                 {
                     await _proxy.SetSetPointAsync(setPoint);
                 }
             }
-            else if (topic == SmokerBridge.GetCommandTopic(TOPIC_PVALUE))
+            else if (topic == GetCommandTopic(_settings.TopicPValue))
             {
                 if (int.TryParse(payload, out var pValue))
                 {
@@ -130,14 +120,14 @@ namespace Inferno.Mqtt.Services
             }
         }
 
-        private static string GetCommandTopic(string topic)
+        private string GetCommandTopic(string topic)
         {
-            return $"{TOPIC_ROOT}/{topic}/{TOPIC_COMMAND}";
+            return $"{_settings.TopicRoot}/{topic}/{_settings.TopicCommand}";
         }
 
-        private static string GetStateTopic(string topic)
+        private string GetStateTopic(string topic)
         {
-            return $"{TOPIC_ROOT}/{topic}/{TOPIC_STATE}";
+            return $"{_settings.TopicRoot}/{topic}/{_settings.TopicState}";
         }
 
         private async Task StateLoop()
@@ -160,37 +150,37 @@ namespace Inferno.Mqtt.Services
 
                     await SendUpdateMessage(status.AugerOn.ToString(),
                                             _lastStatus.AugerOn.ToString(),
-                                            TOPIC_AUGER,
+                                            _settings.TopicAuger,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.BlowerOn.ToString(),
                                             _lastStatus.BlowerOn.ToString(),
-                                            TOPIC_BLOWER,
+                                            _settings.TopicBlower,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.IgniterOn.ToString(),
                                             _lastStatus.IgniterOn.ToString(),
-                                            TOPIC_IGNITER,
+                                            _settings.TopicIgniter,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.FireHealthy.ToString(),
                                             _lastStatus.FireHealthy.ToString(),
-                                            TOPIC_FIREHEALTHY,
+                                            _settings.TopicFireHealthy,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.Mode,
                                             _lastStatus.Mode,
-                                            TOPIC_MODE,
+                                            _settings.TopicMode,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.SetPoint.ToString(),
                                             _lastStatus.SetPoint.ToString(),
-                                            TOPIC_SETPOINT,
+                                            _settings.TopicSetPoint,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.PValue.ToString(),
                                             _lastStatus.PValue.ToString(),
-                                            TOPIC_PVALUE,
+                                            _settings.TopicPValue,
                                             forceUpdate);
 
                     // Only update the grill/probe temps every 5 iterations
@@ -201,7 +191,7 @@ namespace Inferno.Mqtt.Services
                             double grillTemp = status.Temps?.GrillTemp ?? -1;
                             await SendUpdateMessage(grillTemp.ToString(),
                                                     _lastGrillTemp.ToString(),
-                                                    TOPIC_GRILLTEMP,
+                                                    _settings.TopicGrillTemp,
                                                     forceUpdate);
                             _lastGrillTemp = grillTemp;
                         }
@@ -211,7 +201,7 @@ namespace Inferno.Mqtt.Services
                             double probeTemp = status.Temps?.ProbeTemp ?? -1;
                             await SendUpdateMessage(probeTemp.ToString(),
                                                 _lastProbeTemp.ToString(),
-                                                TOPIC_PROBETEMP,
+                                                _settings.TopicProbeTemp,
                                                 forceUpdate);
                             _lastProbeTemp = probeTemp;
                         }

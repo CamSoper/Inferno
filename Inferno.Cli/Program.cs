@@ -1,5 +1,6 @@
-﻿using Inferno.Common.Models;
+using Inferno.Common.Models;
 using Inferno.Common.Proxies;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -8,10 +9,17 @@ namespace Inferno.Cli
 {
     class Program
     {
-        static SmokerProxy _smokerProxy = new SmokerProxy();
-        
+        static SmokerProxy _smokerProxy = null!;
+
         static async Task Main(string[] args)
         {
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", optional: false)
+                .AddEnvironmentVariables()
+                .Build();
+            var apiBaseUrl = configuration["Api:BaseUrl"] ?? "http://127.0.0.1:5000";
+            _smokerProxy = new SmokerProxy(apiBaseUrl);
+
             if(args == null || args.Length < 1)
             {
                 PrintHelp();
