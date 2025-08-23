@@ -1,9 +1,10 @@
 using System.Diagnostics;
 using Inferno.Api.Interfaces;
+using Inferno.Api.Pid;
+using Inferno.Api.Settings;
+using Inferno.Common.Extensions;
 using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
-using Inferno.Api.Pid;
-using Inferno.Common.Extensions;
 
 namespace Inferno.Api.Services
 {
@@ -15,6 +16,7 @@ namespace Inferno.Api.Services
         IRelayDevice _igniter;
         IRtdArray _rtdArray;
         IDisplay _display;
+        SmokerSettings _settings;
 
         int _setPoint;
         /// <summary>
@@ -22,22 +24,22 @@ namespace Inferno.Api.Services
         /// Borrowed from Traeger's "P" setting. 1 is the lowest, 5 is the highest.
         /// </summary>
         int _pValue;
-        int _maxSetPoint = 400;
-        int _minSetPoint = 180;
+        int _maxSetPoint;
+        int _minSetPoint;
 
-        int _maxGrillTemp = 425;
+        int _maxGrillTemp;
 
         /// <summary>
         /// Timeout for the blower to run after shutdown.
         /// </summary>
-        TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
+        TimeSpan _shutdownBlowerTimeout;
         
         /// <summary>
         /// Hold cycle time. This is the amount of time a Hold iteration takes in total.
         /// The PID determines a period of time to run the auger as a percentage of this time.
         /// Also used in Sear mode to determine how long to run the auger when the grill is too hot.
         /// </summary>
-        TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
+        TimeSpan _holdCycle;
 
         CancellationTokenSource _cts = null!;
         SmokerPid _pid;
@@ -46,12 +48,12 @@ namespace Inferno.Api.Services
         /// <summary>
         /// Maximum value for the PID output. This is the maximum amount of the "hold" cycle time that the auger will run.
         /// </summary>
-        double _uMax = 1.0;
+        double _uMax;
         /// <summary>
         /// Minimum value for the PID output. This is the minimum amount of the "hold" cycle time that the auger will run.
         /// Too low of a value can cause the fire to go out. Too high of a value can result in the fire being too hot.
         /// </summary>
-        double _uMin = 0.175;
+        double _uMin;
 
         Task _modeLoopTask;
         DisplayUpdater _displayUpdater;
@@ -61,22 +63,32 @@ namespace Inferno.Api.Services
                         IRelayDevice blower,
                         IRelayDevice igniter,
                         IRtdArray rtdArray,
-                        IDisplay display)
+                        IDisplay display,
+                        SmokerSettings settings)
         {
             _auger = auger;
             _blower = blower;
             _igniter = igniter;
             _rtdArray = rtdArray;
             _display = display;
+            _settings = settings;
+
+            _maxSetPoint = settings.MaxSetPoint;
+            _minSetPoint = settings.MinSetPoint;
+            _maxGrillTemp = settings.MaxGrillTemp;
+            _shutdownBlowerTimeout = TimeSpan.FromMinutes(settings.ShutdownBlowerTimeoutMinutes);
+            _holdCycle = TimeSpan.FromSeconds(settings.HoldCycleSeconds);
+            _uMax = settings.UMax;
+            _uMin = settings.UMin;
 
             _mode = SmokerMode.Ready;
             _setPoint = _minSetPoint;
             _lastModeChange = DateTime.Now;
             PValue = 2;
 
-            CancellationTokenSource _cts = new CancellationTokenSource();
+            _cts = new CancellationTokenSource();
 
-            _pid = new SmokerPid(60.0, 180.0, 45.0);
+            _pid = new SmokerPid(settings.PB, settings.Ti, settings.Td);
 
             _displayUpdater = new DisplayUpdater(this, _display);
             _fireMinder = new FireMinder(this, _igniter);
