@@ -16,9 +16,9 @@ namespace Inferno.Api.Devices
 
         Task _adcReadTask;
 
-        // Minimum valid temperature in Fahrenheit (ambient temperature)
+        // Minimum valid temperature in Fahrenheit (freezing point)
         // Anything below this is likely a sensor error
-        private const double MIN_VALID_TEMP = 32.0;
+        private const double MinValidTemp = 32.0;
         
         // Track last valid temperature readings
         private double _lastValidGrillTemp = Double.NaN;
@@ -39,7 +39,7 @@ namespace Inferno.Api.Devices
             {
                 double temp = Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
                 // Filter out invalid readings (NaN or unrealistically low temps)
-                if (Double.IsNaN(temp) || temp < MIN_VALID_TEMP)
+                if (Double.IsNaN(temp) || temp < MinValidTemp)
                 {
                     return _lastValidGrillTemp;
                 }
@@ -54,7 +54,7 @@ namespace Inferno.Api.Devices
             {
                 double temp = Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
                 // Filter out invalid readings (NaN or unrealistically low temps)
-                if (Double.IsNaN(temp) || temp < MIN_VALID_TEMP)
+                if (Double.IsNaN(temp) || temp < MinValidTemp)
                 {
                     return _lastValidProbeTemp;
                 }
