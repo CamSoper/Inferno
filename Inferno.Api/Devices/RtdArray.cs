@@ -40,20 +40,9 @@ namespace Inferno.Api.Devices
         {
             get
             {
-                double temp = Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
-                // Filter out invalid readings (NaN or unrealistically low temps)
-                if (Double.IsNaN(temp) || temp < MinValidTemperature)
-                {
-                    lock (_tempLock)
-                    {
-                        return _lastValidGrillTemp;
-                    }
-                }
-                lock (_tempLock)
-                {
-                    _lastValidGrillTemp = temp;
-                    return temp;
-                }
+                return GetValidatedTemperature(
+                    _grillResistances.Average(), 
+                    ref _lastValidGrillTemp);
             }
         }
 
@@ -61,20 +50,25 @@ namespace Inferno.Api.Devices
         {
             get
             {
-                double temp = Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
+                return GetValidatedTemperature(
+                    _probeResistances.Average(), 
+                    ref _lastValidProbeTemp);
+            }
+        }
+
+        private double GetValidatedTemperature(double resistanceAverage, ref double lastValidTemp)
+        {
+            double temp = Math.Round(RtdTempFahrenheitFromResistance(resistanceAverage), 0);
+            
+            lock (_tempLock)
+            {
                 // Filter out invalid readings (NaN or unrealistically low temps)
                 if (Double.IsNaN(temp) || temp < MinValidTemperature)
                 {
-                    lock (_tempLock)
-                    {
-                        return _lastValidProbeTemp;
-                    }
+                    return lastValidTemp;
                 }
-                lock (_tempLock)
-                {
-                    _lastValidProbeTemp = temp;
-                    return temp;
-                }
+                lastValidTemp = temp;
+                return temp;
             }
         }
 
