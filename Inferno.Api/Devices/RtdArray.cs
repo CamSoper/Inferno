@@ -27,8 +27,10 @@ namespace Inferno.Api.Devices
         private double _lastValidGrillTemp = Double.NaN;
         private double _lastValidProbeTemp = Double.NaN;
         
-        // Lock object for thread-safe temperature updates
-        private readonly object _tempLock = new object();
+        // Separate lock objects for thread-safe temperature updates
+        // Using separate locks allows concurrent reads of different sensors
+        private readonly object _grillTempLock = new object();
+        private readonly object _probeTempLock = new object();
 
         public RtdArray(SpiDevice spi)
         {
@@ -45,7 +47,8 @@ namespace Inferno.Api.Devices
             {
                 return GetValidatedTemperature(
                     _grillResistances.Average(), 
-                    ref _lastValidGrillTemp);
+                    ref _lastValidGrillTemp,
+                    _grillTempLock);
             }
         }
 
@@ -55,15 +58,16 @@ namespace Inferno.Api.Devices
             {
                 return GetValidatedTemperature(
                     _probeResistances.Average(), 
-                    ref _lastValidProbeTemp);
+                    ref _lastValidProbeTemp,
+                    _probeTempLock);
             }
         }
 
-        private double GetValidatedTemperature(double resistanceAverage, ref double lastValidTemp)
+        private double GetValidatedTemperature(double resistanceAverage, ref double lastValidTemp, object lockObj)
         {
             double temp = Math.Round(RtdTempFahrenheitFromResistance(resistanceAverage), 0);
             
-            lock (_tempLock)
+            lock (lockObj)
             {
                 // Filter out invalid readings (NaN or unrealistically low temps)
                 if (Double.IsNaN(temp) || temp <= MinValidTemperature)
