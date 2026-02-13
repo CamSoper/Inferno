@@ -16,9 +16,12 @@ namespace Inferno.Api.Devices
 
         Task _adcReadTask;
 
-        // Minimum valid temperature in Fahrenheit (freezing point)
-        // Anything below this is likely a sensor error
-        private const double MinValidTemperature = 32.0;
+        // Minimum valid temperature in Fahrenheit
+        // Set to 0°F as a practical threshold. Readings at or below 0°F are likely sensor
+        // errors, especially if the grill was previously at operating temperature (180-400°F).
+        // In extreme cold weather, legitimate ambient readings might be slightly below this,
+        // but the last-valid-reading fallback ensures graceful handling during cold starts.
+        private const double MinValidTemperature = 0.0;
         
         // Track last valid temperature readings
         private double _lastValidGrillTemp = Double.NaN;
