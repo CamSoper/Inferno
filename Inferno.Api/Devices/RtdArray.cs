@@ -66,7 +66,7 @@ namespace Inferno.Api.Devices
             lock (_tempLock)
             {
                 // Filter out invalid readings (NaN or unrealistically low temps)
-                if (Double.IsNaN(temp) || temp < MinValidTemperature)
+                if (Double.IsNaN(temp) || temp <= MinValidTemperature)
                 {
                     return lastValidTemp;
                 }
