@@ -16,6 +16,14 @@ namespace Inferno.Api.Devices
 
         Task _adcReadTask;
 
+        // Minimum valid temperature in Fahrenheit (ambient temperature)
+        // Anything below this is likely a sensor error
+        private const double MIN_VALID_TEMP = 32.0;
+        
+        // Track last valid temperature readings
+        private double _lastValidGrillTemp = Double.NaN;
+        private double _lastValidProbeTemp = Double.NaN;
+
         public RtdArray(SpiDevice spi)
         {
             _adc = new Mcp3008(spi);
@@ -25,9 +33,35 @@ namespace Inferno.Api.Devices
             _adcReadTask = ReadAdc();
         }
 
-        public double GrillTemp => Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
+        public double GrillTemp
+        {
+            get
+            {
+                double temp = Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
+                // Filter out invalid readings (NaN or unrealistically low temps)
+                if (Double.IsNaN(temp) || temp < MIN_VALID_TEMP)
+                {
+                    return _lastValidGrillTemp;
+                }
+                _lastValidGrillTemp = temp;
+                return temp;
+            }
+        }
 
-        public double ProbeTemp => Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
+        public double ProbeTemp
+        {
+            get
+            {
+                double temp = Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
+                // Filter out invalid readings (NaN or unrealistically low temps)
+                if (Double.IsNaN(temp) || temp < MIN_VALID_TEMP)
+                {
+                    return _lastValidProbeTemp;
+                }
+                _lastValidProbeTemp = temp;
+                return temp;
+            }
+        }
 
         private async Task ReadAdc()
         {
