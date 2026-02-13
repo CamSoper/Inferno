@@ -18,11 +18,14 @@ namespace Inferno.Api.Devices
 
         // Minimum valid temperature in Fahrenheit (freezing point)
         // Anything below this is likely a sensor error
-        private const double MinValidTemp = 32.0;
+        private const double MinValidTemperature = 32.0;
         
         // Track last valid temperature readings
         private double _lastValidGrillTemp = Double.NaN;
         private double _lastValidProbeTemp = Double.NaN;
+        
+        // Lock object for thread-safe temperature updates
+        private readonly object _tempLock = new object();
 
         public RtdArray(SpiDevice spi)
         {
@@ -39,12 +42,18 @@ namespace Inferno.Api.Devices
             {
                 double temp = Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
                 // Filter out invalid readings (NaN or unrealistically low temps)
-                if (Double.IsNaN(temp) || temp < MinValidTemp)
+                if (Double.IsNaN(temp) || temp < MinValidTemperature)
                 {
-                    return _lastValidGrillTemp;
+                    lock (_tempLock)
+                    {
+                        return _lastValidGrillTemp;
+                    }
                 }
-                _lastValidGrillTemp = temp;
-                return temp;
+                lock (_tempLock)
+                {
+                    _lastValidGrillTemp = temp;
+                    return temp;
+                }
             }
         }
 
@@ -54,12 +63,18 @@ namespace Inferno.Api.Devices
             {
                 double temp = Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
                 // Filter out invalid readings (NaN or unrealistically low temps)
-                if (Double.IsNaN(temp) || temp < MinValidTemp)
+                if (Double.IsNaN(temp) || temp < MinValidTemperature)
                 {
-                    return _lastValidProbeTemp;
+                    lock (_tempLock)
+                    {
+                        return _lastValidProbeTemp;
+                    }
                 }
-                _lastValidProbeTemp = temp;
-                return temp;
+                lock (_tempLock)
+                {
+                    _lastValidProbeTemp = temp;
+                    return temp;
+                }
             }
         }
 
