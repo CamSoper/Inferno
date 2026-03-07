@@ -23,6 +23,7 @@ namespace Inferno.Api.Services
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
+        public bool IsReigniting => _fireCheck && _igniter.IsOn;
 
         public FireMinder(ISmoker smoker, IRelayDevice igniter)
         {
