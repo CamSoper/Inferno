@@ -368,6 +368,13 @@ namespace Inferno.Api.Services
                return;
             }
 
+            if (_rtdArray.GrillTemp < _minSetPoint)
+            {
+                Debug.WriteLine($"Sear: Grill temp {_rtdArray.GrillTemp} below {_minSetPoint}. Diverting to SMOKE to establish fire.");
+                await Smoke();
+                return;
+            }
+
             if (_rtdArray.GrillTemp < _maxGrillTemp)
             {
                 await RunAuger();
