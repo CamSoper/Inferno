@@ -1,7 +1,7 @@
 
 using System.Text;
 using Inferno.Common.Models;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace Inferno.Common.Proxies
 {
@@ -23,7 +23,8 @@ namespace Inferno.Common.Proxies
         public async Task<SmokerStatus> GetStatusAsync() 
         {
             HttpResponseMessage result = await InfernoApiRequestAsync(SmokerEndpoint.status);
-            return JsonConvert.DeserializeObject<SmokerStatus>(await result.Content.ReadAsStringAsync()) ?? new SmokerStatus();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            return JsonSerializer.Deserialize<SmokerStatus>(await result.Content.ReadAsStringAsync(), options) ?? new SmokerStatus();
         }
 
         public async Task SetSetPointAsync(int setPoint)
