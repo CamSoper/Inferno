@@ -74,7 +74,7 @@ namespace Inferno.Api.Services
             _lastModeChange = DateTime.Now;
             PValue = 2;
 
-            CancellationTokenSource _cts = new CancellationTokenSource();
+            _cts = new CancellationTokenSource();
 
             _pid = new SmokerPid(60.0, 180.0, 45.0);
 

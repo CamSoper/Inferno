@@ -38,7 +38,7 @@ namespace Inferno.Api.Pid
             _integral = _integral.Clamp(-IntegralMax(), IntegralMax());
             double I = GainI() * _integral;
 
-            double derivative = (currentTemp - _lastTemp) / dT.Seconds;
+            double derivative = (currentTemp - _lastTemp) / dT.TotalSeconds;
             double D = GainD() * derivative;
 
             double u = P + I + D;

@@ -9,9 +9,8 @@ public class SmokerPidTests
     {
         var pid = new SmokerPid(60.0, 180.0, 45.0);
         pid.SetPoint = 225;
-        // Prime with setpoint temp to initialize _lastUpdate/_lastTemp
         pid.GetControlVariable(225);
-        Thread.Sleep(1100); // dT.Seconds must be >= 1 to avoid division by zero
+        Thread.Sleep(50);
 
         double u = pid.GetControlVariable(200);
         Assert.True(u > 0, $"Expected positive control variable when below setpoint, got {u}");
@@ -23,10 +22,22 @@ public class SmokerPidTests
         var pid = new SmokerPid(60.0, 180.0, 45.0);
         pid.SetPoint = 225;
         pid.GetControlVariable(225);
-        Thread.Sleep(1100);
+        Thread.Sleep(50);
 
         double u = pid.GetControlVariable(250);
         Assert.True(u < 0, $"Expected negative control variable when above setpoint, got {u}");
+    }
+
+    [Fact]
+    public void GetControlVariable_AtSetPoint_ReturnsNearZero()
+    {
+        var pid = new SmokerPid(60.0, 180.0, 45.0);
+        pid.SetPoint = 225;
+        pid.GetControlVariable(225);
+        Thread.Sleep(50);
+
+        double u = pid.GetControlVariable(225);
+        Assert.InRange(u, -0.1, 0.1);
     }
 
     [Fact]
