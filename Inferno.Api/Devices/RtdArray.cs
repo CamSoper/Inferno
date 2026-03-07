@@ -87,13 +87,13 @@ namespace Inferno.Api.Devices
             }
         }
 
-        static double CalculateResistanceFromAdc(double adcValue)
+        internal static double CalculateResistanceFromAdc(double adcValue)
         {
             double rtdV = (adcValue / 1023) * 3.3;
             return ((3.3 * 1000) - (rtdV * 1000)) / rtdV;
         }
 
-        static double RtdTempFahrenheitFromResistance(double Resistance)
+        internal static double RtdTempFahrenheitFromResistance(double Resistance)
         {
             double A = 3.90830e-3; // Coefficient A
             double B = -5.775e-7; // Coefficient B

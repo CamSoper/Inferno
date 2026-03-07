@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Inferno.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="IoT.Device.Bindings" Version="3.1.0" />
   </ItemGroup>
 
