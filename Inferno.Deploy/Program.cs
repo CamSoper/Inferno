@@ -33,6 +33,12 @@ return await Deployment.RunAsync(() =>
         ["cli"] = "Inferno.Cli",
     };
 
+    // Ensure publish directories exist so FileArchive doesn't fail during preview
+    foreach (var svc in services)
+    {
+        Directory.CreateDirectory(Path.Combine("..", "publish", svc));
+    }
+
     // Step 1: Publish all projects locally
     var publishOutputs = new Dictionary<string, LocalCommand>();
     foreach (var svc in services)
@@ -64,11 +70,10 @@ return await Deployment.RunAsync(() =>
     var copyOps = new Dictionary<string, CopyToRemote>();
     foreach (var svc in services)
     {
-        var svcName = svc; // capture for closure
         copyOps[svc] = new CopyToRemote($"copy-{svc}", new CopyToRemoteArgs
         {
             Connection = conn,
-            Source = publishOutputs[svcName].Stdout.Apply(_ => (AssetOrArchive)new FileArchive($"../publish/{svcName}")),
+            Source = new FileArchive($"../publish/{svc}"),
             RemotePath = $"{remotePath}/{svc}",
         }, new CustomResourceOptions
         {
