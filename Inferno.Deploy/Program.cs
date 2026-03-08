@@ -64,10 +64,11 @@ return await Deployment.RunAsync(() =>
     var copyOps = new Dictionary<string, CopyToRemote>();
     foreach (var svc in services)
     {
+        var svcName = svc; // capture for closure
         copyOps[svc] = new CopyToRemote($"copy-{svc}", new CopyToRemoteArgs
         {
             Connection = conn,
-            Source = new FileArchive($"../publish/{svc}"),
+            Source = publishOutputs[svcName].Stdout.Apply(_ => (AssetOrArchive)new FileArchive($"../publish/{svcName}")),
             RemotePath = $"{remotePath}/{svc}",
         }, new CustomResourceOptions
         {
