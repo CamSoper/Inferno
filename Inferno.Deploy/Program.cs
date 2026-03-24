@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Pulumi;
 using Pulumi.Command.Remote;
 using Pulumi.Command.Remote.Inputs;
@@ -59,8 +60,8 @@ return await Deployment.RunAsync(() =>
         Create = string.Join(" && ", publishCommands),
         Triggers = new[]
         {
-            // Re-publish when this stack is updated
-            DateTime.UtcNow.ToString("o"),
+            // Re-publish only when source files change
+            SourceHash.Compute(".."),
         },
     });
 
@@ -153,3 +154,24 @@ return await Deployment.RunAsync(() =>
         ["services"] = services,
     };
 });
+
+static class SourceHash
+{
+    public static string Compute(string rootDir)
+    {
+        var files = Directory.EnumerateFiles(rootDir, "*.*", SearchOption.AllDirectories)
+            .Where(f => f.EndsWith(".cs") || f.EndsWith(".csproj"))
+            .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
+                     && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
+            .OrderBy(f => f);
+
+        using var sha = SHA256.Create();
+        foreach (var file in files)
+        {
+            var bytes = File.ReadAllBytes(file);
+            sha.TransformBlock(bytes, 0, bytes.Length, null, 0);
+        }
+        sha.TransformFinalBlock([], 0, 0);
+        return Convert.ToHexString(sha.Hash!);
+    }
+}
