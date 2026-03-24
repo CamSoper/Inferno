@@ -19,18 +19,23 @@ dotnet build Inferno.Api/Inferno.Api.csproj
 publish-all.bat          # Publishes CLI → Mqtt → Api, deploys via scp to pi@inferno
 ```
 
-Individual projects have their own `publish.bat` scripts that publish with `dotnet publish -c Debug` and `scp` to the Pi. The Pi hostname is `inferno`.
+Deployment to the Pi is managed via Pulumi (see `Inferno.Deploy`). The Pi hostname is `inferno`.
 
-There are no unit tests in this project.
+```bash
+# Run tests
+dotnet test Inferno.Tests
+```
 
 ## Architecture
 
-Four projects in `Inferno.sln`:
+Six projects in `Inferno.sln`:
 
 - **Inferno.Api** — ASP.NET Core Web API (port 5000/5001). Core controller logic, PID algorithm, fire management, hardware device abstractions. This is the main application that runs on the Pi.
 - **Inferno.Cli** — Command-line client for controlling the smoker remotely via HTTP.
 - **Inferno.Common** — Shared models (`SmokerMode`, `SmokerStatus`, `Temps`), interfaces (`ISmoker`), and `SmokerProxy` HTTP client.
 - **Inferno.Mqtt** — MQTT bridge service that exposes smoker state to Home Assistant. Subscribes/publishes on `inferno/{topic}/{command|state}` topics.
+- **Inferno.Deploy** — Pulumi infrastructure-as-code project for deploying to the Pi.
+- **Inferno.Tests** — xUnit test project covering PID, RTD, FireMinder, PreheatMonitor, and extensions.
 
 ### Core Control Flow (Inferno.Api)
 
@@ -38,6 +43,7 @@ Four projects in `Inferno.sln`:
 
 - **Smoker.cs** — Main state machine. Controls auger feed cycles, blower, igniter. In Hold mode, uses PID output to modulate auger duty cycle.
 - **FireMinder.cs** — Background fire health monitor with auto-reignition and timeout detection.
+- **PreheatMonitor.cs** — Stability-based preheat detection using a rolling temperature window with latch behavior.
 - **SmokerPid.cs** — PID controller (PB=60, Ti=180, Td=45) with integral windup protection. Returns duty cycle for 10-second hold cycles.
 - **DisplayUpdater.cs** — Refreshes the LCD every second with mode, temps, and hardware status.
 
@@ -59,7 +65,7 @@ The P-value (0-5) is a Traeger-style pellet feed rate that controls auger on/off
 
 - `IoT.Device.Bindings` — .NET IoT library for Pcf8574, Lcd2004, Mcp3008, GPIO
 - `MQTTnet.Extensions.ManagedClient` — MQTT client for Home Assistant bridge
-- `Newtonsoft.Json` — JSON serialization in Common project
+- `System.Text.Json` — JSON serialization in Common project
 
 ## Hardware Pin Assignments
 

@@ -9,6 +9,7 @@ namespace Inferno.Common.Models
         public bool IgniterOn { get; set; }
         public Temps? Temps { get; set; }
         public bool FireHealthy { get; set; }
+        public bool Preheated { get; set; }
         public string Mode { get; set; } = "";
         public int SetPoint { get; set; }
         public int PValue { get; set; }

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Inferno.Common.Models;
 using Inferno.Common.Proxies;
 using MQTTnet;
@@ -22,6 +23,7 @@ namespace Inferno.Mqtt.Services
         private const string TOPIC_BLOWER = "blower";
         private const string TOPIC_IGNITER = "igniter";
         private const string TOPIC_FIREHEALTHY = "firehealthy";
+        private const string TOPIC_PREHEATED = "preheated";
 
 
         private readonly string _brokerAddress;
@@ -98,7 +100,183 @@ namespace Inferno.Mqtt.Services
 
             _mqttClient.ApplicationMessageReceivedAsync += ProcessCommand;
 
+            await PublishDiscoveryAsync();
+
             _stateLoop = StateLoop();
+        }
+
+        private async Task PublishDiscoveryAsync()
+        {
+            Console.WriteLine($"{DateTime.Now} Publishing HA MQTT discovery configs");
+
+            var device = new Dictionary<string, object>
+            {
+                ["identifiers"] = new[] { "inferno_smoker" },
+                ["name"] = "Inferno Smoker",
+                ["manufacturer"] = "Traeger / DIY",
+                ["model"] = "Junior Elite 20 (Modified)",
+            };
+
+            // Sensor entities
+            await PublishDiscoveryConfigAsync("sensor", "grill_temp", new Dictionary<string, object>
+            {
+                ["name"] = "Grill Temperature",
+                ["state_topic"] = GetStateTopic(TOPIC_GRILLTEMP),
+                ["unit_of_measurement"] = "°F",
+                ["device_class"] = "temperature",
+                ["state_class"] = "measurement",
+                ["device"] = device,
+                ["unique_id"] = "inferno_grill_temp",
+            });
+
+            await PublishDiscoveryConfigAsync("sensor", "probe_temp", new Dictionary<string, object>
+            {
+                ["name"] = "Probe Temperature",
+                ["state_topic"] = GetStateTopic(TOPIC_PROBETEMP),
+                ["unit_of_measurement"] = "°F",
+                ["device_class"] = "temperature",
+                ["state_class"] = "measurement",
+                ["device"] = device,
+                ["unique_id"] = "inferno_probe_temp",
+            });
+
+            await PublishDiscoveryConfigAsync("sensor", "set_point_sensor", new Dictionary<string, object>
+            {
+                ["name"] = "Set Point",
+                ["state_topic"] = GetStateTopic(TOPIC_SETPOINT),
+                ["unit_of_measurement"] = "°F",
+                ["icon"] = "mdi:thermometer-check",
+                ["device"] = device,
+                ["unique_id"] = "inferno_set_point_sensor",
+            });
+
+            await PublishDiscoveryConfigAsync("sensor", "p_value_sensor", new Dictionary<string, object>
+            {
+                ["name"] = "P-Value",
+                ["state_topic"] = GetStateTopic(TOPIC_PVALUE),
+                ["icon"] = "mdi:fire",
+                ["device"] = device,
+                ["unique_id"] = "inferno_p_value_sensor",
+            });
+
+            await PublishDiscoveryConfigAsync("sensor", "mode_sensor", new Dictionary<string, object>
+            {
+                ["name"] = "Mode",
+                ["state_topic"] = GetStateTopic(TOPIC_MODE),
+                ["icon"] = "mdi:grill",
+                ["device"] = device,
+                ["unique_id"] = "inferno_mode_sensor",
+            });
+
+            // Binary sensor entities
+            await PublishDiscoveryConfigAsync("binary_sensor", "auger", new Dictionary<string, object>
+            {
+                ["name"] = "Auger",
+                ["state_topic"] = GetStateTopic(TOPIC_AUGER),
+                ["payload_on"] = "True",
+                ["payload_off"] = "False",
+                ["icon"] = "mdi:screw-lag",
+                ["device"] = device,
+                ["unique_id"] = "inferno_auger",
+            });
+
+            await PublishDiscoveryConfigAsync("binary_sensor", "blower", new Dictionary<string, object>
+            {
+                ["name"] = "Blower",
+                ["state_topic"] = GetStateTopic(TOPIC_BLOWER),
+                ["payload_on"] = "True",
+                ["payload_off"] = "False",
+                ["icon"] = "mdi:fan",
+                ["device"] = device,
+                ["unique_id"] = "inferno_blower",
+            });
+
+            await PublishDiscoveryConfigAsync("binary_sensor", "igniter", new Dictionary<string, object>
+            {
+                ["name"] = "Igniter",
+                ["state_topic"] = GetStateTopic(TOPIC_IGNITER),
+                ["payload_on"] = "True",
+                ["payload_off"] = "False",
+                ["icon"] = "mdi:fire-alert",
+                ["device"] = device,
+                ["unique_id"] = "inferno_igniter",
+            });
+
+            await PublishDiscoveryConfigAsync("binary_sensor", "fire_healthy", new Dictionary<string, object>
+            {
+                ["name"] = "Fire Healthy",
+                ["state_topic"] = GetStateTopic(TOPIC_FIREHEALTHY),
+                ["payload_on"] = "True",
+                ["payload_off"] = "False",
+                ["device_class"] = "running",
+                ["device"] = device,
+                ["unique_id"] = "inferno_fire_healthy",
+            });
+
+            await PublishDiscoveryConfigAsync("binary_sensor", "preheated", new Dictionary<string, object>
+            {
+                ["name"] = "Preheated",
+                ["state_topic"] = GetStateTopic(TOPIC_PREHEATED),
+                ["payload_on"] = "True",
+                ["payload_off"] = "False",
+                ["icon"] = "mdi:thermometer-check",
+                ["device"] = device,
+                ["unique_id"] = "inferno_preheated",
+            });
+
+            // Control entities
+            var modes = Enum.GetNames<SmokerMode>();
+            await PublishDiscoveryConfigAsync("select", "mode", new Dictionary<string, object>
+            {
+                ["name"] = "Mode",
+                ["state_topic"] = GetStateTopic(TOPIC_MODE),
+                ["command_topic"] = GetCommandTopic(TOPIC_MODE),
+                ["options"] = modes,
+                ["icon"] = "mdi:grill",
+                ["device"] = device,
+                ["unique_id"] = "inferno_mode",
+            });
+
+            await PublishDiscoveryConfigAsync("number", "set_point", new Dictionary<string, object>
+            {
+                ["name"] = "Set Point",
+                ["state_topic"] = GetStateTopic(TOPIC_SETPOINT),
+                ["command_topic"] = GetCommandTopic(TOPIC_SETPOINT),
+                ["min"] = 180,
+                ["max"] = 400,
+                ["step"] = 5,
+                ["unit_of_measurement"] = "°F",
+                ["icon"] = "mdi:thermometer-check",
+                ["device"] = device,
+                ["unique_id"] = "inferno_set_point",
+            });
+
+            await PublishDiscoveryConfigAsync("number", "p_value", new Dictionary<string, object>
+            {
+                ["name"] = "P-Value",
+                ["state_topic"] = GetStateTopic(TOPIC_PVALUE),
+                ["command_topic"] = GetCommandTopic(TOPIC_PVALUE),
+                ["min"] = 0,
+                ["max"] = 5,
+                ["step"] = 1,
+                ["icon"] = "mdi:fire",
+                ["device"] = device,
+                ["unique_id"] = "inferno_p_value",
+            });
+
+            Console.WriteLine($"{DateTime.Now} HA MQTT discovery configs published");
+        }
+
+        private async Task PublishDiscoveryConfigAsync(string component, string objectId, Dictionary<string, object> config)
+        {
+            var topic = $"homeassistant/{component}/inferno/{objectId}/config";
+            var payload = JsonSerializer.Serialize(config);
+            var message = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(payload)
+                .WithRetainFlag()
+                .Build();
+            await _mqttClient.EnqueueAsync(message);
         }
 
         private async Task ProcessCommand(MqttApplicationMessageReceivedEventArgs args)
@@ -176,6 +354,11 @@ namespace Inferno.Mqtt.Services
                     await SendUpdateMessage(status.FireHealthy.ToString(),
                                             _lastStatus.FireHealthy.ToString(),
                                             TOPIC_FIREHEALTHY,
+                                            forceUpdate);
+
+                    await SendUpdateMessage(status.Preheated.ToString(),
+                                            _lastStatus.Preheated.ToString(),
+                                            TOPIC_PREHEATED,
                                             forceUpdate);
 
                     await SendUpdateMessage(status.Mode,

@@ -64,6 +64,9 @@ return await Deployment.RunAsync(() =>
         },
     });
 
+    // Resolve ~ to absolute path (CopyToRemote and systemd don't expand ~)
+    var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
+
     // Step 2: Copy published artifacts to the Pi (Pulumi diffs the file archive)
     var copyOps = new Dictionary<string, CopyToRemote>();
     foreach (var svc in services)
@@ -72,16 +75,12 @@ return await Deployment.RunAsync(() =>
         {
             Connection = conn,
             Source = new FileArchive($"../publish/{svc}"),
-            RemotePath = $"{remotePath}/{svc}",
+            RemotePath = absoluteRemotePath,
         }, new CustomResourceOptions
         {
             DependsOn = { publishAll, installDotnet },
         });
     }
-
-    // Step 4: Ensure systemd services exist and start them
-    // Resolve ~ to absolute path for systemd (which doesn't expand ~)
-    var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
 
     string BuildServiceUnit(string name, string workDir, string dllPath, string user, string? afterService = null, string extraEnv = "")
     {

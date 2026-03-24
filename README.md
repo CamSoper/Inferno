@@ -1,5 +1,5 @@
 # Inferno
-Wood pellet smoker powered by .NET 7 and Raspberry Pi 3.  
+Wood pellet smoker powered by .NET 8 and Raspberry Pi 3.
 
 * See the [photo album](https://1drv.ms/u/s!Ag9fVAifJI6dsrwlhf-iGDwD4qkaxw?e=BbMc6f)!
 * See it [featured on an episode of On .NET](https://www.youtube.com/watch?v=4kJGRuXZ4kg)! This is a short overview and discussion.
@@ -20,6 +20,14 @@ Class library shared between projects.
 ## Inferno.Mqtt
 
 Service that polls Inferno.Api, relaying commands and statuses to/from an MQTT broker. I surface this in a Home Assistant dashboard for UI.
+
+## Inferno.Deploy
+
+Pulumi infrastructure-as-code project for deploying to the Pi.
+
+## Inferno.Tests
+
+xUnit test project for core logic (PID, RTD, fire monitoring, preheat detection, etc.).
 
 ## Hardware
 

@@ -56,6 +56,7 @@ namespace Inferno.Api.Services
         Task _modeLoopTask;
         DisplayUpdater _displayUpdater;
         FireMinder _fireMinder;
+        PreheatMonitor _preheatMonitor;
 
         public Smoker(IRelayDevice auger,
                         IRelayDevice blower,
@@ -80,6 +81,7 @@ namespace Inferno.Api.Services
 
             _displayUpdater = new DisplayUpdater(this, _display);
             _fireMinder = new FireMinder(this, _igniter);
+            _preheatMonitor = new PreheatMonitor();
             _modeLoopTask = ModeLoop();
         }
 
@@ -110,19 +112,29 @@ namespace Inferno.Api.Services
             ProbeTemp = Double.IsNaN(_rtdArray.ProbeTemp) ? -1 : _rtdArray.ProbeTemp
         };
 
-        public SmokerStatus Status => new SmokerStatus()
+        public SmokerStatus Status
         {
-            AugerOn = _auger.IsOn,
-            BlowerOn = _blower.IsOn,
-            IgniterOn = _igniter.IsOn,
-            Temps = this.Temps,
-            FireHealthy = _fireMinder.IsFireHealthy,
-            Mode = this.Mode.ToString(),
-            SetPoint = _setPoint,
-            PValue = _pValue,
-            ModeTime = _lastModeChange,
-            CurrentTime = DateTime.Now
-        };
+            get
+            {
+                _preheatMonitor.Update(
+                    _rtdArray.GrillTemp, _setPoint,
+                    _mode.IsCookingMode(), _fireMinder.IsFireHealthy);
+                return new SmokerStatus()
+                {
+                    AugerOn = _auger.IsOn,
+                    BlowerOn = _blower.IsOn,
+                    IgniterOn = _igniter.IsOn,
+                    Temps = this.Temps,
+                    FireHealthy = _fireMinder.IsFireHealthy,
+                    Preheated = _preheatMonitor.IsPreheated,
+                    Mode = this.Mode.ToString(),
+                    SetPoint = _setPoint,
+                    PValue = _pValue,
+                    ModeTime = _lastModeChange,
+                    CurrentTime = DateTime.Now
+                };
+            }
+        }
         
         public bool SetMode(SmokerMode newMode)
         {
@@ -166,6 +178,11 @@ namespace Inferno.Api.Services
             if (!newMode.IsCookingMode())
             {
                 SetPoint = _minSetPoint;
+            }
+
+            if (newMode == SmokerMode.Ready || newMode == SmokerMode.Shutdown)
+            {
+                _preheatMonitor.Reset();
             }
 
             _mode = newMode;
