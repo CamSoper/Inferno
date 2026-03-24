@@ -88,29 +88,31 @@ return await Deployment.RunAsync(() =>
     }
 
     // Step 4: Ensure systemd services exist and start them
-    var serviceTemplate = @"
-[Unit]
-Description=Inferno {0} Service
-After=network.target
+    // Resolve ~ to absolute path for systemd (which doesn't expand ~)
+    var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
 
-[Service]
-Environment=DOTNET_ROOT=/home/{4}/.dotnet
-Environment=PATH=/home/{4}/.dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-WorkingDirectory={1}/{2}
-ExecStart=/home/{4}/.dotnet/dotnet {1}/{2}/{3}.dll
-Restart=always
-RestartSec=5
-User={4}
-
-[Install]
-WantedBy=multi-user.target
-";
+    var serviceTemplate =
+        "[Unit]\n" +
+        "Description=Inferno {0} Service\n" +
+        "After=network.target\n" +
+        "\n" +
+        "[Service]\n" +
+        "Environment=DOTNET_ROOT=/home/{4}/.dotnet\n" +
+        "Environment=PATH=/home/{4}/.dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n" +
+        "WorkingDirectory={1}/{2}\n" +
+        "ExecStart=/home/{4}/.dotnet/dotnet {1}/{2}/{3}.dll\n" +
+        "Restart=always\n" +
+        "RestartSec=5\n" +
+        "User={4}\n" +
+        "\n" +
+        "[Install]\n" +
+        "WantedBy=multi-user.target\n";
 
     var setupCommands = new List<string>();
     foreach (var svc in services)
     {
         var project = projectMap[svc];
-        var unitFile = string.Format(serviceTemplate, svc.ToUpper(), remotePath, svc, project, piUser);
+        var unitFile = string.Format(serviceTemplate, svc.ToUpper(), absoluteRemotePath, svc, project, piUser);
         var escapedUnit = unitFile.Replace("'", "'\\''");
         setupCommands.Add($"echo '{escapedUnit}' | sudo tee /etc/systemd/system/inferno-{svc}.service > /dev/null");
     }
