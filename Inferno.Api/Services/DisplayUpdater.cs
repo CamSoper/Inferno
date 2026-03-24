@@ -69,22 +69,24 @@ namespace Inferno.Api.Services
                     Console.WriteLine(errorText);
                     Debug.WriteLine(errorText);
                     _display.Init();
+                    await Task.Delay(TimeSpan.FromSeconds(5));
                 }
             }
         }
 
         private string HardwareStatus()
         {
+            var status = _smoker.Status;
             string fire = " ";
-            if (_smoker.Status.IgniterOn)
+            if (status.IgniterOn)
             {
                 fire = "I";
             }
-            else if (!_smoker.Status.FireHealthy)
+            else if (!status.FireHealthy)
             {
                 fire = "F";
             }
-            string auger = (_smoker.Status.AugerOn) ? "A" : " ";
+            string auger = (status.AugerOn) ? "A" : " ";
             string heartbeat = (_heartbeatFlag) ? "*" : " ";
             return $"{fire}{auger}{heartbeat}";
         }
