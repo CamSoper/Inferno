@@ -206,9 +206,9 @@ namespace Inferno.Mqtt.Services
             {
                 ["name"] = "Fire Healthy",
                 ["state_topic"] = GetStateTopic(TOPIC_FIREHEALTHY),
-                ["payload_on"] = "True",
-                ["payload_off"] = "False",
-                ["device_class"] = "running",
+                ["payload_on"] = "False",
+                ["payload_off"] = "True",
+                ["device_class"] = "problem",
                 ["device"] = device,
                 ["unique_id"] = "inferno_fire_healthy",
             });
