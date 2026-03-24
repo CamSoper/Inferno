@@ -48,21 +48,18 @@ return await Deployment.RunAsync(() =>
         Create = "if ! command -v dotnet &> /dev/null || ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft.AspNetCore.App 10.'; then curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --runtime aspnetcore; fi && echo \"dotnet: $(dotnet --version 2>/dev/null || echo 'not found')\"",
     });
 
-    // Step 1: Publish all projects locally
-    var publishOutputs = new Dictionary<string, LocalCommand>();
-    foreach (var svc in services)
+    // Step 1: Publish all projects locally (sequential to avoid shared-project file locking)
+    var publishCommands = services.Select(svc =>
+        $"dotnet publish ../{projectMap[svc]} -c Release -o ../publish/{svc}");
+    var publishAll = new LocalCommand("publish-all", new Pulumi.Command.Local.CommandArgs
     {
-        var project = projectMap[svc];
-        publishOutputs[svc] = new LocalCommand($"publish-{svc}", new Pulumi.Command.Local.CommandArgs
+        Create = string.Join(" && ", publishCommands),
+        Triggers = new[]
         {
-            Create = $"dotnet publish ../{project} -c Release -o ../publish/{svc}",
-            Triggers = new[]
-            {
-                // Re-publish when this stack is updated
-                DateTime.UtcNow.ToString("o"),
-            },
-        });
-    }
+            // Re-publish when this stack is updated
+            DateTime.UtcNow.ToString("o"),
+        },
+    });
 
     // Step 2: Stop services before deploying
     var stopServices = new RemoteCommand("stop-services", new Pulumi.Command.Remote.CommandArgs
@@ -72,7 +69,7 @@ return await Deployment.RunAsync(() =>
         Triggers = new[] { DateTime.UtcNow.ToString("o") },
     }, new CustomResourceOptions
     {
-        DependsOn = publishOutputs.Values.Cast<Resource>().Append(installDotnet).ToList(),
+        DependsOn = { publishAll, installDotnet },
     });
 
     // Step 3: Copy published artifacts to the Pi
