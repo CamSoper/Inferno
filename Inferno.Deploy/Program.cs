@@ -64,18 +64,7 @@ return await Deployment.RunAsync(() =>
         },
     });
 
-    // Step 2: Stop services before deploying
-    var stopServices = new RemoteCommand("stop-services", new Pulumi.Command.Remote.CommandArgs
-    {
-        Connection = conn,
-        Create = "sudo systemctl stop inferno-api inferno-mqtt inferno-cli 2>/dev/null || true",
-        Triggers = new[] { DateTime.UtcNow.ToString("o") },
-    }, new CustomResourceOptions
-    {
-        DependsOn = { publishAll, installDotnet },
-    });
-
-    // Step 3: Copy published artifacts to the Pi
+    // Step 2: Copy published artifacts to the Pi (Pulumi diffs the file archive)
     var copyOps = new Dictionary<string, CopyToRemote>();
     foreach (var svc in services)
     {
@@ -86,7 +75,7 @@ return await Deployment.RunAsync(() =>
             RemotePath = $"{remotePath}/{svc}",
         }, new CustomResourceOptions
         {
-            DependsOn = { stopServices },
+            DependsOn = { publishAll, installDotnet },
         });
     }
 
@@ -139,16 +128,20 @@ return await Deployment.RunAsync(() =>
         setupCommands.Add($"echo '{escapedUnit}' | sudo tee /etc/systemd/system/inferno-{svc}.service > /dev/null");
     }
     setupCommands.Add("sudo systemctl daemon-reload");
+    setupCommands.Add("sudo systemctl stop inferno-api inferno-mqtt inferno-cli 2>/dev/null || true");
     foreach (var svc in services)
     {
         setupCommands.Add($"sudo systemctl enable --now inferno-{svc}");
     }
 
+    // Trigger restart only when copied files change
+    var copyTriggers = copyOps.Values.Select(c => c.Urn.Apply(u => u)).ToList();
+
     var startServices = new RemoteCommand("start-services", new Pulumi.Command.Remote.CommandArgs
     {
         Connection = conn,
         Create = string.Join(" && ", setupCommands),
-        Triggers = new[] { DateTime.UtcNow.ToString("o") },
+        Triggers = copyTriggers,
     }, new CustomResourceOptions
     {
         DependsOn = copyOps.Values.Cast<Resource>().ToList(),
