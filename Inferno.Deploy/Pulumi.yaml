@@ -1,0 +1,27 @@
+name: inferno-deploy
+runtime:
+  name: dotnet
+description: Deploy Inferno services to Raspberry Pi via SSH
+config:
+  piHost:
+    description: Hostname or IP of the Raspberry Pi
+    default: inferno
+  piUser:
+    description: SSH user on the Pi
+    default: pi
+  remotePath:
+    description: Base path on the Pi for deployed services
+    default: ~/inferno
+  privateKeyPath:
+    description: Path to SSH private key
+    default: ~/.ssh/id_rsa
+  mqttBrokerAddress:
+    description: Hostname or IP of the MQTT broker
+    default: localhost
+  mqttUsername:
+    description: MQTT broker username
+    default: ""
+  mqttPassword:
+    description: MQTT broker password
+    secret: true
+    default: ""

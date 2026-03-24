@@ -74,7 +74,7 @@ namespace Inferno.Api.Services
             _lastModeChange = DateTime.Now;
             PValue = 2;
 
-            CancellationTokenSource _cts = new CancellationTokenSource();
+            _cts = new CancellationTokenSource();
 
             _pid = new SmokerPid(60.0, 180.0, 45.0);
 
@@ -230,8 +230,13 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Smoke()
         {
-            _blower.On();
+            if (_fireMinder.IsReigniting)
+            {
+                await ReignitionFeed();
+                return;
+            }
 
+            _blower.On();
 
             TimeSpan waitTime = TimeSpan.FromSeconds(45 + (10 * PValue));
             await RunAuger(TimeSpan.FromSeconds(15), waitTime);
@@ -246,6 +251,12 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Hold()
         {
+            if (_fireMinder.IsReigniting)
+            {
+                await ReignitionFeed();
+                return;
+            }
+
             _blower.On();
 
             if (_igniter.IsOn && !_fireMinder.IsFireStarted)
@@ -329,15 +340,39 @@ namespace Inferno.Api.Services
 
 
         ///<summary>
+        /// Minimal auger feed during reignition to prevent pellet accumulation in the firepot.
+        /// Feeds just enough to give the igniter something to light without flooding.
+        ///</summary>
+        private async Task ReignitionFeed()
+        {
+            _blower.On();
+            Debug.WriteLine("Reignition feed: minimal auger pulse.");
+            await RunAuger(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(57));
+        }
+
+        ///<summary>
         /// Burn hot
         ///</summary>
         private async Task Sear()
         {
+            if (_fireMinder.IsReigniting)
+            {
+                await ReignitionFeed();
+                return;
+            }
+
             if (_igniter.IsOn && !_fireMinder.IsFireStarted)
             {
                Debug.WriteLine("Sear: Igniter is on during startup. Diverting to SMOKE mode.");
                await Smoke();
                return;
+            }
+
+            if (_rtdArray.GrillTemp < _minSetPoint)
+            {
+                Debug.WriteLine($"Sear: Grill temp {_rtdArray.GrillTemp} below {_minSetPoint}. Diverting to SMOKE to establish fire.");
+                await Smoke();
+                return;
             }
 
             if (_rtdArray.GrillTemp < _maxGrillTemp)

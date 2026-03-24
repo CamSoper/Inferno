@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Device.Spi;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 using System.Linq;
@@ -14,6 +15,12 @@ namespace Inferno.Api.Devices
         ConcurrentQueue<double> _grillResistances;
         ConcurrentQueue<double> _probeResistances;
 
+        // Physically reasonable temperature range for a pellet grill.
+        // Below -20F the sensor or wiring is likely failed/shorted.
+        // Above 1000F something is very wrong (firepot max is ~600F).
+        const double MinValidTempF = -20;
+        const double MaxValidTempF = 1000;
+
         Task _adcReadTask;
 
         public RtdArray(SpiDevice spi)
@@ -25,9 +32,15 @@ namespace Inferno.Api.Devices
             _adcReadTask = ReadAdc();
         }
 
-        public double GrillTemp => Math.Round(RtdTempFahrenheitFromResistance(_grillResistances.Average()), 0);
+        public double GrillTemp => GetTemp(_grillResistances);
 
-        public double ProbeTemp => Math.Round(RtdTempFahrenheitFromResistance(_probeResistances.Average()), 0);
+        public double ProbeTemp => GetTemp(_probeResistances);
+
+        private static double GetTemp(ConcurrentQueue<double> resistances)
+        {
+            if (resistances.IsEmpty) return Double.NaN;
+            return Math.Round(RtdTempFahrenheitFromResistance(resistances.Average()), 0);
+        }
 
         private async Task ReadAdc()
         {
@@ -35,7 +48,7 @@ namespace Inferno.Api.Devices
             {
                 int grillValue;
                 int probeValue;
-                
+
                 try
                 {
                     grillValue = _adc.Read(0);
@@ -48,30 +61,39 @@ namespace Inferno.Api.Devices
                     continue;
                 }
 
-                _grillResistances.Enqueue(CalculateResistanceFromAdc(grillValue));
-                _probeResistances.Enqueue(CalculateResistanceFromAdc(probeValue));
-                while (_grillResistances.Count > 100)
-                {
-                    double temp;
-                    _grillResistances.TryDequeue(out temp);
-                }
-                while (_probeResistances.Count > 100)
-                {
-                    double temp;
-                    _probeResistances.TryDequeue(out temp);
-                }
+                EnqueueIfValid(_grillResistances, grillValue, "Grill");
+                EnqueueIfValid(_probeResistances, probeValue, "Probe");
 
                 await Task.Delay(TimeSpan.FromMilliseconds(10));
             }
         }
 
-        static double CalculateResistanceFromAdc(double adcValue)
+        private static void EnqueueIfValid(ConcurrentQueue<double> queue, int adcValue, string sensorName)
+        {
+            double resistance = CalculateResistanceFromAdc(adcValue);
+            double tempF = RtdTempFahrenheitFromResistance(resistance);
+
+            if (Double.IsNaN(tempF) || Double.IsInfinity(tempF) ||
+                tempF < MinValidTempF || tempF > MaxValidTempF)
+            {
+                Debug.WriteLine($"{sensorName} sensor: rejected reading {tempF:F1}F (ADC={adcValue}, R={resistance:F1})");
+                return;
+            }
+
+            queue.Enqueue(resistance);
+            while (queue.Count > 100)
+            {
+                queue.TryDequeue(out _);
+            }
+        }
+
+        internal static double CalculateResistanceFromAdc(double adcValue)
         {
             double rtdV = (adcValue / 1023) * 3.3;
             return ((3.3 * 1000) - (rtdV * 1000)) / rtdV;
         }
 
-        static double RtdTempFahrenheitFromResistance(double Resistance)
+        internal static double RtdTempFahrenheitFromResistance(double Resistance)
         {
             double A = 3.90830e-3; // Coefficient A
             double B = -5.775e-7; // Coefficient B
@@ -82,8 +104,7 @@ namespace Inferno.Api.Devices
         }
 
 
-        #region IDisposable Support
-        private bool disposedValue = false; // To detect redundant calls
+        private bool disposedValue;
 
         protected virtual void Dispose(bool disposing)
         {
@@ -93,26 +114,14 @@ namespace Inferno.Api.Devices
                 {
                     _adc.Dispose();
                 }
-
                 disposedValue = true;
             }
         }
 
-        // TODO: override a finalizer only if Dispose(bool disposing) above has code to free unmanaged resources.
-        // ~TempProbes()
-        // {
-        //   // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
-        //   Dispose(false);
-        // }
-
-        // This code added to correctly implement the disposable pattern.
         public void Dispose()
         {
-            // Do not change this code. Put cleanup code in Dispose(bool disposing) above.
             Dispose(true);
-            // TODO: uncomment the following line if the finalizer is overridden above.
-            // GC.SuppressFinalize(this);
+            GC.SuppressFinalize(this);
         }
-        #endregion
     }
 }
