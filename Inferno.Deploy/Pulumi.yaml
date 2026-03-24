@@ -15,3 +15,13 @@ config:
   privateKeyPath:
     description: Path to SSH private key
     default: ~/.ssh/id_rsa
+  mqttBrokerAddress:
+    description: Hostname or IP of the MQTT broker
+    default: localhost
+  mqttUsername:
+    description: MQTT broker username
+    default: ""
+  mqttPassword:
+    description: MQTT broker password
+    secret: true
+    default: ""

@@ -12,6 +12,9 @@ return await Deployment.RunAsync(() =>
     var piUser = config.Get("piUser") ?? "pi";
     var remotePath = config.Get("remotePath") ?? "~/inferno";
     var privateKeyPath = config.Get("privateKeyPath") ?? "~/.ssh/id_rsa";
+    var mqttBrokerAddress = config.Get("mqttBrokerAddress") ?? "localhost";
+    var mqttUsername = config.Get("mqttUsername") ?? "";
+    var mqttPassword = config.Get("mqttPassword") ?? "";
 
     var expandedKeyPath = privateKeyPath.Replace("~", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
     if (!File.Exists(expandedKeyPath))
@@ -91,28 +94,47 @@ return await Deployment.RunAsync(() =>
     // Resolve ~ to absolute path for systemd (which doesn't expand ~)
     var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
 
-    var serviceTemplate =
-        "[Unit]\n" +
-        "Description=Inferno {0} Service\n" +
-        "After=network.target\n" +
-        "\n" +
-        "[Service]\n" +
-        "Environment=DOTNET_ROOT=/home/{4}/.dotnet\n" +
-        "Environment=PATH=/home/{4}/.dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n" +
-        "WorkingDirectory={1}/{2}\n" +
-        "ExecStart=/home/{4}/.dotnet/dotnet {1}/{2}/{3}.dll\n" +
-        "Restart=always\n" +
-        "RestartSec=5\n" +
-        "User={4}\n" +
-        "\n" +
-        "[Install]\n" +
-        "WantedBy=multi-user.target\n";
+    string BuildServiceUnit(string name, string workDir, string dllPath, string user, string? afterService = null, string extraEnv = "")
+    {
+        var after = afterService != null ? $"network.target {afterService}" : "network.target";
+        return
+            "[Unit]\n" +
+            $"Description=Inferno {name} Service\n" +
+            $"After={after}\n" +
+            "\n" +
+            "[Service]\n" +
+            $"Environment=DOTNET_ROOT=/home/{user}/.dotnet\n" +
+            $"Environment=PATH=/home/{user}/.dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n" +
+            extraEnv +
+            $"WorkingDirectory={workDir}\n" +
+            $"ExecStart=/home/{user}/.dotnet/dotnet {dllPath}\n" +
+            "Restart=always\n" +
+            "RestartSec=5\n" +
+            $"User={user}\n" +
+            "\n" +
+            "[Install]\n" +
+            "WantedBy=multi-user.target\n";
+    }
 
     var setupCommands = new List<string>();
     foreach (var svc in services)
     {
         var project = projectMap[svc];
-        var unitFile = string.Format(serviceTemplate, svc.ToUpper(), absoluteRemotePath, svc, project, piUser);
+        var workDir = $"{absoluteRemotePath}/{svc}";
+        var dllPath = $"{workDir}/{project}.dll";
+
+        string? afterService = null;
+        var extraEnv = "";
+        if (svc == "mqtt")
+        {
+            afterService = "inferno-api.service";
+            extraEnv =
+                $"Environment=MQTT_BROKER_ADDRESS={mqttBrokerAddress}\n" +
+                $"Environment=MQTT_USERNAME={mqttUsername}\n" +
+                $"Environment=MQTT_PASSWORD={mqttPassword}\n";
+        }
+
+        var unitFile = BuildServiceUnit(svc.ToUpper(), workDir, dllPath, piUser, afterService, extraEnv);
         var escapedUnit = unitFile.Replace("'", "'\\''");
         setupCommands.Add($"echo '{escapedUnit}' | sudo tee /etc/systemd/system/inferno-{svc}.service > /dev/null");
     }
