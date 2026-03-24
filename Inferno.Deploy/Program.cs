@@ -41,11 +41,11 @@ return await Deployment.RunAsync(() =>
         Directory.CreateDirectory(Path.Combine("..", "publish", svc));
     }
 
-    // Step 0: Ensure .NET 10 runtime is installed on the Pi
+    // Step 0: Ensure .NET 8 runtime is installed on the Pi
     var installDotnet = new RemoteCommand("install-dotnet", new Pulumi.Command.Remote.CommandArgs
     {
         Connection = conn,
-        Create = "if ! command -v dotnet &> /dev/null || ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft.AspNetCore.App 10.'; then curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --runtime aspnetcore; fi && echo \"dotnet: $(dotnet --version 2>/dev/null || echo 'not found')\"",
+        Create = "if ! command -v dotnet &> /dev/null || ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft.AspNetCore.App 8.'; then curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0 --runtime aspnetcore; fi && echo \"dotnet: $(dotnet --version 2>/dev/null || echo 'not found')\"",
     });
 
     // Step 1: Publish all projects locally (sequential to avoid shared-project file locking)

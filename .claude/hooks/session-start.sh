@@ -6,9 +6,9 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-# Install .NET 10 SDK if not already present
-if ! command -v dotnet &> /dev/null || ! dotnet --list-sdks 2>/dev/null | grep -q "^10\."; then
-  curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0
+# Install .NET 8 SDK if not already present
+if ! command -v dotnet &> /dev/null || ! dotnet --list-sdks 2>/dev/null | grep -q "^8\."; then
+  curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0
 fi
 
 export PATH="$HOME/.dotnet:$PATH"
