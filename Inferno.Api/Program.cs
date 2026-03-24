@@ -25,7 +25,6 @@ builder.Services.AddSingleton<ISmoker>(new Smoker(new Auger(_gpio, 22),
                                                 new Igniter(_gpio, 23),
                                                 new RtdArray(_spi),
                                                 new Display()));
-builder.Services.AddControllers();
 
 var app = builder.Build();
 
