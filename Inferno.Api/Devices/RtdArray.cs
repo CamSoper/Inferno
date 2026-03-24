@@ -68,7 +68,7 @@ namespace Inferno.Api.Devices
             }
         }
 
-        private void EnqueueIfValid(ConcurrentQueue<double> queue, int adcValue, string sensorName)
+        private static void EnqueueIfValid(ConcurrentQueue<double> queue, int adcValue, string sensorName)
         {
             double resistance = CalculateResistanceFromAdc(adcValue);
             double tempF = RtdTempFahrenheitFromResistance(resistance);

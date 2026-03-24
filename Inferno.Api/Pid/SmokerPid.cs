@@ -27,7 +27,10 @@ namespace Inferno.Api.Pid
         public double GetControlVariable(double currentTemp)
         {
             if (double.IsNaN(currentTemp))
+            {
+                _lastUpdate = DateTime.Now;
                 return 0;
+            }
 
             double error = currentTemp - SetPoint;
             

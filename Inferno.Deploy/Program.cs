@@ -14,9 +14,11 @@ return await Deployment.RunAsync(() =>
     var privateKeyPath = config.Get("privateKeyPath") ?? "~/.ssh/id_rsa";
 
     var expandedKeyPath = privateKeyPath.Replace("~", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-    var privateKey = File.Exists(expandedKeyPath)
-        ? Output.Create(File.ReadAllText(expandedKeyPath))
-        : Output.Create("");
+    if (!File.Exists(expandedKeyPath))
+    {
+        Pulumi.Log.Warn($"SSH private key not found at '{expandedKeyPath}'. Deployment will fail unless the key is provided.");
+    }
+    var privateKey = Output.Create(File.Exists(expandedKeyPath) ? File.ReadAllText(expandedKeyPath) : "");
 
     var conn = new ConnectionArgs
     {
@@ -38,6 +40,13 @@ return await Deployment.RunAsync(() =>
     {
         Directory.CreateDirectory(Path.Combine("..", "publish", svc));
     }
+
+    // Step 0: Ensure .NET 10 runtime is installed on the Pi
+    var installDotnet = new RemoteCommand("install-dotnet", new Pulumi.Command.Remote.CommandArgs
+    {
+        Connection = conn,
+        Create = "if ! command -v dotnet &> /dev/null || ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft.AspNetCore.App 10.'; then curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --runtime aspnetcore; fi && echo \"dotnet: $(dotnet --version 2>/dev/null || echo 'not found')\"",
+    });
 
     // Step 1: Publish all projects locally
     var publishOutputs = new Dictionary<string, LocalCommand>();
@@ -63,7 +72,7 @@ return await Deployment.RunAsync(() =>
         Triggers = new[] { DateTime.UtcNow.ToString("o") },
     }, new CustomResourceOptions
     {
-        DependsOn = publishOutputs.Values.Cast<Resource>().ToList(),
+        DependsOn = publishOutputs.Values.Cast<Resource>().Append(installDotnet).ToList(),
     });
 
     // Step 3: Copy published artifacts to the Pi
@@ -88,8 +97,10 @@ Description=Inferno {0} Service
 After=network.target
 
 [Service]
+Environment=DOTNET_ROOT=/home/{4}/.dotnet
+Environment=PATH=/home/{4}/.dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 WorkingDirectory={1}/{2}
-ExecStart={1}/{2}/{3}
+ExecStart=/home/{4}/.dotnet/dotnet {1}/{2}/{3}.dll
 Restart=always
 RestartSec=5
 User={4}
