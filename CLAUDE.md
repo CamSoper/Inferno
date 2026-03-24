@@ -15,8 +15,9 @@ dotnet build Inferno.sln
 # Build individual project
 dotnet build Inferno.Api/Inferno.Api.csproj
 
-# Publish and deploy to Pi (from Windows)
-publish-all.bat          # Publishes CLI → Mqtt → Api, deploys via scp to pi@inferno
+# Deploy project
+cd Inferno.Deploy/
+pulumi up
 ```
 
 Deployment to the Pi is managed via Pulumi (see `Inferno.Deploy`). The Pi hostname is `inferno`.
