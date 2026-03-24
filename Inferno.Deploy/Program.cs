@@ -39,6 +39,14 @@ return await Deployment.RunAsync(() =>
         ["cli"] = "Inferno.Cli",
     };
 
+    // Each service depends on its own project + Common
+    var serviceDeps = new Dictionary<string, string[]>
+    {
+        ["api"] = ["Inferno.Api", "Inferno.Common"],
+        ["mqtt"] = ["Inferno.Mqtt", "Inferno.Common"],
+        ["cli"] = ["Inferno.Cli", "Inferno.Common"],
+    };
+
     // Ensure publish directories exist so FileArchive doesn't fail during preview
     foreach (var svc in services)
     {
@@ -52,21 +60,20 @@ return await Deployment.RunAsync(() =>
         Create = "if ! command -v dotnet &> /dev/null || ! dotnet --list-runtimes 2>/dev/null | grep -q 'Microsoft.AspNetCore.App 8.'; then curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 8.0 --runtime aspnetcore; fi && echo \"dotnet: $(dotnet --version 2>/dev/null || echo 'not found')\"",
     });
 
-    // Step 1: Publish all projects locally (sequential to avoid shared-project file locking)
-    var publishCommands = services.Select(svc =>
-        $"dotnet publish ../{projectMap[svc]} -c Release -o ../publish/{svc}");
-    var publishAll = new LocalCommand("publish-all", new Pulumi.Command.Local.CommandArgs
-    {
-        Create = string.Join(" && ", publishCommands),
-        Triggers = new[]
-        {
-            // Re-publish only when source files change
-            SourceHash.Compute(".."),
-        },
-    });
-
     // Resolve ~ to absolute path (CopyToRemote and systemd don't expand ~)
     var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
+
+    // Step 1: Publish each project independently, triggered by its own source hash
+    var publishOps = new Dictionary<string, LocalCommand>();
+    foreach (var svc in services)
+    {
+        var hash = SourceHash.Compute("..", serviceDeps[svc]);
+        publishOps[svc] = new LocalCommand($"publish-{svc}", new Pulumi.Command.Local.CommandArgs
+        {
+            Create = $"dotnet publish ../{projectMap[svc]} -c Release -o ../publish/{svc}",
+            Triggers = new[] { hash },
+        });
+    }
 
     // Step 2: Copy published artifacts to the Pi (Pulumi diffs the file archive)
     var copyOps = new Dictionary<string, CopyToRemote>();
@@ -79,7 +86,7 @@ return await Deployment.RunAsync(() =>
             RemotePath = absoluteRemotePath,
         }, new CustomResourceOptions
         {
-            DependsOn = { publishAll, installDotnet },
+            DependsOn = { publishOps[svc], installDotnet },
         });
     }
 
@@ -105,7 +112,8 @@ return await Deployment.RunAsync(() =>
             "WantedBy=multi-user.target\n";
     }
 
-    var setupCommands = new List<string>();
+    // Step 3: Install/update systemd unit files (runs once, updates when unit content changes)
+    var unitFiles = new Dictionary<string, string>();
     foreach (var svc in services)
     {
         var project = projectMap[svc];
@@ -123,29 +131,38 @@ return await Deployment.RunAsync(() =>
                 $"Environment=MQTT_PASSWORD={mqttPassword}\n";
         }
 
-        var unitFile = BuildServiceUnit(svc.ToUpper(), workDir, dllPath, piUser, afterService, extraEnv);
-        var escapedUnit = unitFile.Replace("'", "'\\''");
-        setupCommands.Add($"echo '{escapedUnit}' | sudo tee /etc/systemd/system/inferno-{svc}.service > /dev/null");
+        unitFiles[svc] = BuildServiceUnit(svc.ToUpper(), workDir, dllPath, piUser, afterService, extraEnv);
     }
-    setupCommands.Add("sudo systemctl daemon-reload");
-    setupCommands.Add("sudo systemctl stop inferno-api inferno-mqtt inferno-cli 2>/dev/null || true");
+
+    var installUnits = new List<string>();
     foreach (var svc in services)
     {
-        setupCommands.Add($"sudo systemctl enable --now inferno-{svc}");
+        var escapedUnit = unitFiles[svc].Replace("'", "'\\''");
+        installUnits.Add($"echo '{escapedUnit}' | sudo tee /etc/systemd/system/inferno-{svc}.service > /dev/null");
     }
+    installUnits.Add("sudo systemctl daemon-reload");
 
-    // Trigger restart only when copied files change
-    var copyTriggers = copyOps.Values.Select(c => c.Urn.Apply(u => u)).ToList();
-
-    var startServices = new RemoteCommand("start-services", new Pulumi.Command.Remote.CommandArgs
+    var setupServices = new RemoteCommand("setup-services", new Pulumi.Command.Remote.CommandArgs
     {
         Connection = conn,
-        Create = string.Join(" && ", setupCommands),
-        Triggers = copyTriggers,
-    }, new CustomResourceOptions
-    {
-        DependsOn = copyOps.Values.Cast<Resource>().ToList(),
+        Create = string.Join(" && ", installUnits),
+        // Re-run when unit file content changes
+        Triggers = unitFiles.Values.ToArray(),
     });
+
+    // Step 4: Restart each service independently when its files change
+    foreach (var svc in services)
+    {
+        new RemoteCommand($"restart-{svc}", new Pulumi.Command.Remote.CommandArgs
+        {
+            Connection = conn,
+            Create = $"sudo systemctl restart inferno-{svc}",
+            Triggers = new[] { copyOps[svc].Id.Apply(id => id) },
+        }, new CustomResourceOptions
+        {
+            DependsOn = { copyOps[svc], setupServices },
+        });
+    }
 
     return new Dictionary<string, object?>
     {
@@ -157,9 +174,11 @@ return await Deployment.RunAsync(() =>
 
 static class SourceHash
 {
-    public static string Compute(string rootDir)
+    public static string Compute(string rootDir, string[] projectDirs)
     {
-        var files = Directory.EnumerateFiles(rootDir, "*.*", SearchOption.AllDirectories)
+        var files = projectDirs
+            .SelectMany(proj => Directory.EnumerateFiles(
+                Path.Combine(rootDir, proj), "*.*", SearchOption.AllDirectories))
             .Where(f => f.EndsWith(".cs") || f.EndsWith(".csproj"))
             .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar)
                      && !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
