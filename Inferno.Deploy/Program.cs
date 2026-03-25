@@ -9,7 +9,7 @@ using RemoteCommand = Pulumi.Command.Remote.Command;
 return await Deployment.RunAsync(() =>
 {
     var config = new Config();
-    var piHost = config.Get("piHost") ?? "inferno";
+    var piHost = config.Get("piHost") ?? "192.168.15.9"; // inferno.camthegeek.local
     var piUser = config.Get("piUser") ?? "pi";
     var remotePath = config.Get("remotePath") ?? "~/inferno";
     var privateKeyPath = config.Get("privateKeyPath") ?? "~/.ssh/id_rsa";

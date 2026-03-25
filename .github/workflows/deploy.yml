@@ -1,0 +1,21 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Pulumi deployment
+        run: |
+          curl -fsSL -X POST \
+            -H "Authorization: token ${{ secrets.PULUMI_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "inheritSettings": true,
+              "operation": "update"
+            }' \
+            "https://api.pulumi.com/api/stacks/${{ vars.PULUMI_ORG }}/inferno-deploy/main/deployments"
