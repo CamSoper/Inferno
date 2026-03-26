@@ -22,14 +22,18 @@ namespace Inferno.Api.Devices
 
         public void Init()
         {
+            _lcd?.Dispose();
+            _driver?.Dispose();
+            _i2c?.Dispose();
+
             _i2c = I2cDevice.Create(new I2cConnectionSettings(1, 0x27));
             _driver = new Pcf8574(_i2c);
-            _lcd = new Lcd2004(registerSelectPin: 0, 
-                    enablePin: 2, 
-                    dataPins: new int[] { 4, 5, 6, 7 }, 
-                    backlightPin: 3, 
-                    backlightBrightness: 0.1f, 
-                    readWritePin: 1, 
+            _lcd = new Lcd2004(registerSelectPin: 0,
+                    enablePin: 2,
+                    dataPins: new int[] { 4, 5, 6, 7 },
+                    backlightPin: 3,
+                    backlightBrightness: 0.1f,
+                    readWritePin: 1,
                     controller: new GpioController(PinNumberingScheme.Logical, _driver));
         }
 

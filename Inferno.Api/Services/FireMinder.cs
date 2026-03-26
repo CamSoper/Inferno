@@ -38,7 +38,7 @@ namespace Inferno.Api.Services
             _fireStarted = false;
             _fireCheck = false;
             _initialIgnition = true;
-            _ignitionTemp = 200;
+            _ignitionTemp = 150;
         }
 
         public int GetFireCheckTemp()
@@ -69,7 +69,7 @@ namespace Inferno.Api.Services
                         if (!_igniter.IsOn)
                         {
                             _igniter.On();
-                            _ignitionTemp = Convert.ToInt32(_smoker.Temps.GrillTemp) + 10;
+                            _ignitionTemp = Math.Max(_ignitionTemp, Convert.ToInt32(_smoker.Temps.GrillTemp) + 10);
                             _igniterOnTime = DateTime.Now;
                         }
                     }
@@ -120,7 +120,7 @@ namespace Inferno.Api.Services
                         {
                             // The fire has been going out for a while, try to reignite
                             _igniter.On();
-                            _ignitionTemp = Convert.ToInt32(_smoker.Temps.GrillTemp) + 5;
+                            _ignitionTemp = Math.Max(150, Convert.ToInt32(_smoker.Temps.GrillTemp) + 5);
                             _igniterOnTime = DateTime.Now;
                         }
                         else if (_fireCheck && _smoker.Temps.GrillTemp >= GetFireCheckTemp())

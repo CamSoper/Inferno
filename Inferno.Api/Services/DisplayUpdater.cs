@@ -65,11 +65,8 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    string errorText = $"{DateTime.Now} Display updater exception! {ex} {ex.StackTrace}";
-                    Console.WriteLine(errorText);
-                    Debug.WriteLine(errorText);
+                    Debug.WriteLine($"{DateTime.Now} Display updater exception! {ex.Message}");
                     _display.Init();
-                    await Task.Delay(TimeSpan.FromSeconds(5));
                 }
             }
         }
