@@ -1,0 +1,3 @@
+environment:
+  - inferno-deploy/main
+config:

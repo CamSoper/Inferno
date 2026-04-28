@@ -329,5 +329,3 @@ ASALocalRun/
 # MFractors (Xamarin productivity tool) working folder
 .mfractor/
 
-# Pulumi stack configs (contain environment-specific settings)
-Inferno.Deploy/Pulumi.*.yaml
