@@ -80,6 +80,20 @@ return await Deployment.RunAsync(() =>
         Directory.CreateDirectory(Path.Combine("..", "publish", svc));
     }
 
+    // Step 0a: Let sshd accept the env vars the Pulumi command provider passes
+    // (PULUMI_COMMAND_STDOUT/STDERR). Without this, every remote command logs an
+    // "Unable to set 'PULUMI_COMMAND_STDERR'" warning. AcceptEnv is additive, so
+    // a drop-in is safe even though the base config already lists one of them.
+    var configureSshEnv = new RemoteCommand("configure-ssh-env", new Pulumi.Command.Remote.CommandArgs
+    {
+        Connection = conn,
+        Create =
+            "echo 'AcceptEnv PULUMI_COMMAND_STDOUT PULUMI_COMMAND_STDERR' | " +
+            "sudo tee /etc/ssh/sshd_config.d/50-pulumi-acceptenv.conf > /dev/null && " +
+            "sudo systemctl reload ssh && echo 'sshd AcceptEnv configured'",
+        Triggers = new[] { targetId },
+    });
+
     // Step 0: Ensure .NET 8 ASP.NET Core runtime is installed on the Pi.
     // The runtime-only install lands in ~/.dotnet (not on PATH and no SDK), so
     // probe that path directly -- checking `command -v dotnet` would always miss
@@ -94,7 +108,7 @@ return await Deployment.RunAsync(() =>
             "echo \"dotnet runtimes: $(\"$DOTNET\" --list-runtimes 2>/dev/null | tr '\\n' ';' || echo 'not found')\"",
         // Re-run when targeting a new/rebuilt host.
         Triggers = new[] { targetId },
-    });
+    }, new CustomResourceOptions { DependsOn = { configureSshEnv } });
 
     // Step 0b: Enable the I2C + SPI kernel interfaces the API needs (MCP3008 ADC
     // over SPI, LCD over I2C). Idempotent; raspi-config get_* returns 0 when
@@ -109,7 +123,7 @@ return await Deployment.RunAsync(() =>
             "echo 'i2c/spi enabled -- REBOOT REQUIRED for device nodes to appear'; " +
             "else echo 'i2c/spi enabled and device nodes present'; fi",
         Triggers = new[] { targetId },
-    });
+    }, new CustomResourceOptions { DependsOn = { configureSshEnv } });
 
     // Resolve ~ to absolute path (CopyToRemote and systemd don't expand ~)
     var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
@@ -202,7 +216,7 @@ return await Deployment.RunAsync(() =>
         Create = string.Join(" && ", installUnits),
         // Re-run when unit file content changes or the target host changes.
         Triggers = unitFiles.Values.Append(targetId).ToArray(),
-    });
+    }, new CustomResourceOptions { DependsOn = { configureSshEnv } });
 
     // Step 4: Restart each service independently when its files change
     foreach (var svc in serviceUnits)
