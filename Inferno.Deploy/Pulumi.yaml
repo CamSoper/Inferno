@@ -12,6 +12,9 @@ config:
   remotePath:
     description: Base path on the Pi for deployed services
     default: ~/inferno
+  deployToken:
+    description: Bump to any new value to force a full reprovision of the Pi (e.g. after rebuilding the host under the same name)
+    default: ""
   privateKeyPath:
     description: Path to SSH private key
     default: ~/.ssh/id_rsa
