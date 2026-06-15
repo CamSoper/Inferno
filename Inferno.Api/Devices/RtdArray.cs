@@ -21,6 +21,14 @@ namespace Inferno.Api.Devices
         const double MinValidTempF = -20;
         const double MaxValidTempF = 1000;
 
+        // A brief burst of out-of-range readings is noise and is filtered out. A
+        // sustained run means the sensor is disconnected/failed, so we drain the
+        // stale samples and let the temperature read NaN (surfaced as "Unplugged")
+        // instead of holding the last good value forever. ~2s at the 10ms read rate.
+        internal const int MaxConsecutiveInvalidReadings = 200;
+        int _grillInvalidCount;
+        int _probeInvalidCount;
+
         Task _adcReadTask;
 
         public RtdArray(SpiDevice spi)
@@ -61,14 +69,14 @@ namespace Inferno.Api.Devices
                     continue;
                 }
 
-                EnqueueIfValid(_grillResistances, grillValue, "Grill");
-                EnqueueIfValid(_probeResistances, probeValue, "Probe");
+                EnqueueIfValid(_grillResistances, grillValue, "Grill", ref _grillInvalidCount);
+                EnqueueIfValid(_probeResistances, probeValue, "Probe", ref _probeInvalidCount);
 
                 await Task.Delay(TimeSpan.FromMilliseconds(10));
             }
         }
 
-        private static void EnqueueIfValid(ConcurrentQueue<double> queue, int adcValue, string sensorName)
+        internal static void EnqueueIfValid(ConcurrentQueue<double> queue, int adcValue, string sensorName, ref int consecutiveInvalid)
         {
             double resistance = CalculateResistanceFromAdc(adcValue);
             double tempF = RtdTempFahrenheitFromResistance(resistance);
@@ -77,9 +85,18 @@ namespace Inferno.Api.Devices
                 tempF < MinValidTempF || tempF > MaxValidTempF)
             {
                 Debug.WriteLine($"{sensorName} sensor: rejected reading {tempF:F1}F (ADC={adcValue}, R={resistance:F1})");
+
+                // A few bad readings in a row are noise. A sustained run means the
+                // sensor is gone — drain the stale samples so the temp reads NaN.
+                if (++consecutiveInvalid >= MaxConsecutiveInvalidReadings)
+                {
+                    queue.Clear();
+                    consecutiveInvalid = MaxConsecutiveInvalidReadings; // keep bounded
+                }
                 return;
             }
 
+            consecutiveInvalid = 0;
             queue.Enqueue(resistance);
             while (queue.Count > 100)
             {

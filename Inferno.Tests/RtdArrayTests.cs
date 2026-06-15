@@ -55,4 +55,47 @@ public class RtdArrayTests
         double tempF = RtdArray.RtdTempFahrenheitFromResistance(resistance);
         // Should not throw — result may be NaN/Infinity, handled by validation layer
     }
+
+    [Fact]
+    public void EnqueueIfValid_ValidReading_EnqueuesAndResetsCounter()
+    {
+        var queue = new System.Collections.Concurrent.ConcurrentQueue<double>();
+        int invalid = 5;
+
+        RtdArray.EnqueueIfValid(queue, 512, "Test", ref invalid); // ~998Ω, valid
+
+        Assert.Single(queue);
+        Assert.Equal(0, invalid);
+    }
+
+    [Fact]
+    public void EnqueueIfValid_BriefInvalidBurst_KeepsStaleData()
+    {
+        var queue = new System.Collections.Concurrent.ConcurrentQueue<double>();
+        int invalid = 0;
+
+        // A good reading, then a short burst of bad ones (noise) — the good sample
+        // is retained so the average rides through the spike.
+        RtdArray.EnqueueIfValid(queue, 512, "Test", ref invalid);
+        for (int i = 0; i < 10; i++)
+            RtdArray.EnqueueIfValid(queue, 0, "Test", ref invalid); // open circuit
+
+        Assert.False(queue.IsEmpty);
+    }
+
+    [Fact]
+    public void EnqueueIfValid_SustainedInvalid_DrainsForUnpluggedDetection()
+    {
+        var queue = new System.Collections.Concurrent.ConcurrentQueue<double>();
+        int invalid = 0;
+
+        RtdArray.EnqueueIfValid(queue, 512, "Test", ref invalid); // seed a good sample
+
+        // A sustained run of open-circuit readings = sensor unplugged → drain so the
+        // temperature reads NaN (surfaced downstream as "Unplugged").
+        for (int i = 0; i < RtdArray.MaxConsecutiveInvalidReadings; i++)
+            RtdArray.EnqueueIfValid(queue, 0, "Test", ref invalid);
+
+        Assert.True(queue.IsEmpty);
+    }
 }
