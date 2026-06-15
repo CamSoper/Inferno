@@ -5,7 +5,7 @@ using Inferno.Common.Models;
 
 namespace Inferno.Api.Services
 {
-    public class DisplayUpdater
+    public class DisplayUpdater : IDisposable
     {
         ISmoker _smoker;
         IDisplay _display;
@@ -13,6 +13,7 @@ namespace Inferno.Api.Services
         bool _heartbeatFlag;
 
         Task _updateDisplayLoop;
+        readonly CancellationTokenSource _stopCts = new();
 
         public DisplayUpdater(ISmoker smoker, IDisplay display)
         {
@@ -25,7 +26,7 @@ namespace Inferno.Api.Services
         private async Task UpdateDisplayLoop()
         {
             Debug.WriteLine("Starting display thread.");
-            while (true)
+            while (!_stopCts.IsCancellationRequested)
             {
                 try
                 {
@@ -61,7 +62,11 @@ namespace Inferno.Api.Services
                     }
 
                     _heartbeatFlag = !_heartbeatFlag;
-                    await Task.Delay(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(1), _stopCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
                 }
                 catch (Exception ex)
                 {
@@ -69,6 +74,12 @@ namespace Inferno.Api.Services
                     _display.Init();
                 }
             }
+        }
+
+        public void Dispose()
+        {
+            _stopCts.Cancel();
+            _stopCts.Dispose();
         }
 
         private string HardwareStatus()

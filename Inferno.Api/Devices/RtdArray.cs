@@ -30,6 +30,7 @@ namespace Inferno.Api.Devices
         int _probeInvalidCount;
 
         Task _adcReadTask;
+        readonly CancellationTokenSource _stopCts = new();
 
         public RtdArray(SpiDevice spi)
         {
@@ -52,7 +53,7 @@ namespace Inferno.Api.Devices
 
         private async Task ReadAdc()
         {
-            while (true)
+            while (!_stopCts.IsCancellationRequested)
             {
                 int grillValue;
                 int probeValue;
@@ -62,17 +63,23 @@ namespace Inferno.Api.Devices
                     grillValue = _adc.Read(0);
                     probeValue = _adc.Read(1);
                 }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"{DateTime.Now} {ex.Message} {ex.StackTrace}");
-                    await Task.Delay(TimeSpan.FromMilliseconds(10));
+                    try { await Task.Delay(TimeSpan.FromMilliseconds(10), _stopCts.Token); }
+                    catch (OperationCanceledException) { break; }
                     continue;
                 }
 
                 EnqueueIfValid(_grillResistances, grillValue, "Grill", ref _grillInvalidCount);
                 EnqueueIfValid(_probeResistances, probeValue, "Probe", ref _probeInvalidCount);
 
-                await Task.Delay(TimeSpan.FromMilliseconds(10));
+                try { await Task.Delay(TimeSpan.FromMilliseconds(10), _stopCts.Token); }
+                catch (OperationCanceledException) { break; }
             }
         }
 
@@ -129,6 +136,8 @@ namespace Inferno.Api.Devices
             {
                 if (disposing)
                 {
+                    _stopCts.Cancel();
+                    _stopCts.Dispose();
                     _adc.Dispose();
                 }
                 disposedValue = true;

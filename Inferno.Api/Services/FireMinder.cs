@@ -6,13 +6,14 @@ using Inferno.Common.Models;
 
 namespace Inferno.Api.Services
 {
-    public class FireMinder
+    public class FireMinder : IDisposable
     {
         ISmoker _smoker;
         IRelayDevice _igniter;
         Func<DateTime> _now;
         LidMonitor _lidMonitor;
         Task _fireMinderLoop;
+        readonly CancellationTokenSource _stopCts = new();
         TimeSpan _igniterTimeout = TimeSpan.FromMinutes(10);
         TimeSpan _fireTimeout = TimeSpan.FromMinutes(10);
         /// <summary>
@@ -84,12 +85,16 @@ namespace Inferno.Api.Services
         {
             Debug.WriteLine("Starting Fire Minder thread.");
             ResetFireStatus();
-            while (true)
+            while (!_stopCts.IsCancellationRequested)
             {
                 try
                 {
                     Tick();
-                    await Task.Delay(TimeSpan.FromSeconds(1));
+                    await Task.Delay(TimeSpan.FromSeconds(1), _stopCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
                 }
                 catch (Exception ex)
                 {
@@ -98,6 +103,12 @@ namespace Inferno.Api.Services
                     Debug.WriteLine(errorText);
                 }
             }
+        }
+
+        public void Dispose()
+        {
+            _stopCts.Cancel();
+            _stopCts.Dispose();
         }
 
         /// <summary>

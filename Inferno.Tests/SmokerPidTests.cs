@@ -69,6 +69,21 @@ public class SmokerPidTests
     }
 
     [Fact]
+    public void GetControlVariable_TwoCallsSameInstant_ReturnsFinite()
+    {
+        var pid = new SmokerPid(60.0, 180.0, 45.0);
+        pid.SetPoint = 225;
+
+        // Back-to-back calls with effectively zero elapsed time must not divide by
+        // zero in the derivative term and produce NaN/Infinity.
+        pid.GetControlVariable(200); // seed
+        double u = pid.GetControlVariable(200);
+
+        Assert.False(double.IsNaN(u), $"Control variable should not be NaN, got {u}");
+        Assert.False(double.IsInfinity(u), $"Control variable should not be Infinity, got {u}");
+    }
+
+    [Fact]
     public void SetPoint_CanBeUpdated()
     {
         var pid = new SmokerPid(60.0, 180.0, 45.0);

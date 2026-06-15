@@ -7,7 +7,7 @@ using Inferno.Common.Extensions;
 
 namespace Inferno.Api.Services
 {
-    public class Smoker : ISmoker
+    public class Smoker : ISmoker, IDisposable
     {
         SmokerMode _mode;
         IRelayDevice _auger;
@@ -39,7 +39,12 @@ namespace Inferno.Api.Services
         /// </summary>
         TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
 
+        // Per-mode token: cancelled by SetMode to interrupt the running mode's delay.
+        // Guarded by _ctsLock so SetMode's Cancel() can never race ModeLoop's Dispose().
         CancellationTokenSource _cts = null!;
+        readonly object _ctsLock = new();
+        // Cancelled once, on Dispose, to stop every background loop for a clean shutdown.
+        readonly CancellationTokenSource _lifetimeCts = new();
         SmokerPid _pid;
         DateTime _lastModeChange;
  
@@ -74,6 +79,7 @@ namespace Inferno.Api.Services
         TimeSpan _recoveryFeedWaitTime = TimeSpan.FromSeconds(5);
 
         Task _modeLoopTask;
+        Task _preheatLoopTask;
         DisplayUpdater _displayUpdater;
         FireMinder _fireMinder;
         PreheatMonitor _preheatMonitor;
@@ -95,14 +101,13 @@ namespace Inferno.Api.Services
             _lastModeChange = DateTime.Now;
             PValue = 2;
 
-            _cts = new CancellationTokenSource();
-
             _pid = new SmokerPid(60.0, 180.0, 45.0);
 
             _displayUpdater = new DisplayUpdater(this, _display);
             _fireMinder = new FireMinder(this, _igniter);
             _preheatMonitor = new PreheatMonitor();
             _modeLoopTask = ModeLoop();
+            _preheatLoopTask = PreheatLoop();
         }
 
         public SmokerMode Mode => _mode;
@@ -136,9 +141,9 @@ namespace Inferno.Api.Services
         {
             get
             {
-                _preheatMonitor.Update(
-                    _rtdArray.GrillTemp, _setPoint,
-                    _mode.IsCookingMode(), _fireMinder.IsFireHealthy);
+                // Preheat sampling runs on its own fixed-cadence loop (PreheatLoop);
+                // reading status no longer mutates it. This keeps the 60-sample window
+                // a true ~60s and avoids a data race on the monitor's queue.
                 return new SmokerStatus()
                 {
                     AugerOn = _auger.IsOn,
@@ -207,9 +212,14 @@ namespace Inferno.Api.Services
 
             _mode = newMode;
             _lastModeChange = DateTime.Now;
-            if (_cts != null && !_cts.IsCancellationRequested)
+            // Interrupt the running mode's in-flight delay. ModeLoop owns disposal of
+            // the token (under the same lock), so cancelling here is always safe.
+            lock (_ctsLock)
             {
-                _cts.Cancel();
+                if (_cts != null && !_cts.IsCancellationRequested)
+                {
+                    _cts.Cancel();
+                }
             }
             return true;
         }
@@ -220,35 +230,42 @@ namespace Inferno.Api.Services
         private async Task ModeLoop()
         {
             Debug.WriteLine("Starting mode thread.");
-            while (true)
+            while (!_lifetimeCts.IsCancellationRequested)
             {
+                // Fresh per-mode token, linked to the lifetime token so Dispose() also
+                // unblocks the running mode. The previous iteration's token is disposed
+                // here (its awaits have all completed) under the lock SetMode uses to
+                // cancel, so Cancel() and Dispose() can never race.
+                lock (_ctsLock)
+                {
+                    _cts?.Dispose();
+                    _cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+                }
+
                 try
                 {
-                    using (_cts = new CancellationTokenSource())
+                    switch (_mode)
                     {
-                        switch (_mode)
-                        {
-                            case SmokerMode.Error:
-                            case SmokerMode.Shutdown:
-                                await Shutdown();
-                                break;
+                        case SmokerMode.Error:
+                        case SmokerMode.Shutdown:
+                            await Shutdown();
+                            break;
 
-                            case SmokerMode.Hold:
-                                await Hold();
-                                break;
+                        case SmokerMode.Hold:
+                            await Hold();
+                            break;
 
-                            case SmokerMode.Sear:
-                                await Sear();
-                                break;
+                        case SmokerMode.Sear:
+                            await Sear();
+                            break;
 
-                            case SmokerMode.Smoke:
-                                await Smoke();
-                                break;
+                        case SmokerMode.Smoke:
+                            await Smoke();
+                            break;
 
-                            case SmokerMode.Ready:
-                                await Ready();
-                                break;
-                        }
+                        case SmokerMode.Ready:
+                            await Ready();
+                            break;
                     }
                 }
                 catch (Exception ex)
@@ -258,6 +275,33 @@ namespace Inferno.Api.Services
                     Debug.WriteLine(errorText);
                 }
 
+            }
+        }
+
+        ///<summary>
+        /// Samples the preheat detector on a fixed 1 Hz cadence. Kept off the Status
+        /// getter so the rolling window stays a true ~60s regardless of how many
+        /// clients poll status, and so the (non-concurrent) window isn't raced.
+        ///</summary>
+        private async Task PreheatLoop()
+        {
+            while (!_lifetimeCts.IsCancellationRequested)
+            {
+                try
+                {
+                    _preheatMonitor.Update(
+                        _rtdArray.GrillTemp, _setPoint,
+                        _mode.IsCookingMode(), _fireMinder.IsFireHealthy);
+                    await Task.Delay(TimeSpan.FromSeconds(1), _lifetimeCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"{DateTime.Now} Preheat loop exception! {ex.Message}");
+                }
             }
         }
 
@@ -498,7 +542,50 @@ namespace Inferno.Api.Services
             _blower.Off();
             _igniter.Off();
 
-            await Task.Delay(TimeSpan.FromSeconds(1));
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), _cts.Token);
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        }
+
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            // Stop every background loop first so nothing re-energizes a relay while
+            // we're tearing down.
+            _lifetimeCts.Cancel();
+            _fireMinder?.Dispose();
+            _displayUpdater?.Dispose();
+
+            // Drive the fire to a safe terminal state: cut fuel and ignition. Process
+            // shutdown can't block for the timed Shutdown-mode cooldown (systemd would
+            // SIGKILL us), so this is a hard safe-off — residual heat dissipates on its
+            // own. The blower is released below.
+            try { _auger.Off(); } catch { }
+            try { _igniter.Off(); } catch { }
+
+            // Release hardware. RelayDevice.Dispose drives the pin off and closes it;
+            // RtdArray stops its read loop and frees the ADC/SPI; Display frees the LCD.
+            (_auger as IDisposable)?.Dispose();
+            (_blower as IDisposable)?.Dispose();
+            (_igniter as IDisposable)?.Dispose();
+            (_rtdArray as IDisposable)?.Dispose();
+            (_display as IDisposable)?.Dispose();
+
+            lock (_ctsLock)
+            {
+                _cts?.Dispose();
+            }
+            // Deliberately not disposing _lifetimeCts: ModeLoop may still read its Token
+            // as it winds down, and disposing it would throw. The process is exiting, so
+            // the single lingering CancellationTokenSource is reclaimed anyway.
         }
     }
 }

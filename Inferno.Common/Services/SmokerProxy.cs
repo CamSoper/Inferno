@@ -15,7 +15,9 @@ namespace Inferno.Common.Proxies
 
         public SmokerProxy()
         {
-            _client = new HttpClient();
+            // Bound every call so a hung API can't stall a caller indefinitely
+            // (e.g. the MQTT bridge's state loop).
+            _client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         }
 
         private bool disposedValue;
@@ -40,7 +42,8 @@ namespace Inferno.Common.Proxies
         public async Task<int> GetPValueAsync() 
         {
             HttpResponseMessage result = await InfernoApiRequestAsync(SmokerEndpoint.pvalue);
-            return int.Parse(await result.Content.ReadAsStringAsync());
+            string body = await result.Content.ReadAsStringAsync();
+            return int.TryParse(body, out int pValue) ? pValue : 0;
         }
 
         public async Task SetModeAsync(SmokerMode smokerMode)

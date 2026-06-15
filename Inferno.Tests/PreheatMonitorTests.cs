@@ -4,6 +4,32 @@ namespace Inferno.Tests;
 
 public class PreheatMonitorTests
 {
+    [Fact]
+    public void Update_And_Reset_Concurrently_DoNotThrow()
+    {
+        // Update() runs on the preheat loop while Reset() fires from API threads on a
+        // mode change. The internal queue isn't concurrent, so hammer both from many
+        // threads and assert the lock keeps it from throwing/corrupting.
+        var monitor = new PreheatMonitor();
+        var stop = DateTime.UtcNow + TimeSpan.FromMilliseconds(500);
+
+        var updaters = Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+        {
+            var rng = new Random();
+            while (DateTime.UtcNow < stop)
+                monitor.Update(rng.Next(150, 230), 225, isCookingMode: true, isFireHealthy: true);
+        }));
+
+        var resetters = Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
+        {
+            while (DateTime.UtcNow < stop)
+                monitor.Reset();
+        }));
+
+        // Should complete without InvalidOperationException ("collection modified").
+        Task.WaitAll(updaters.Concat(resetters).ToArray());
+    }
+
     private static void FeedStableTemps(PreheatMonitor monitor, double temp, int setPoint, int count)
     {
         for (int i = 0; i < count; i++)
