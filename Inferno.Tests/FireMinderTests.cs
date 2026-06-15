@@ -70,6 +70,68 @@ public class FireMinderTests
     }
 
     [Fact]
+    public void SlowColdStart_KeepsClimbing_DoesNotErrorBeforeIgnition()
+    {
+        // Cold start in Hold: igniter lights and the grill climbs slowly toward the
+        // 150F ignition threshold, taking far longer than the 10 minute igniter
+        // timeout. Each step is upward progress, so the give-up clock keeps resetting
+        // instead of killing a fire that's plainly catching.
+        var smoker = new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 250 };
+        var igniter = new FakeRelay();
+        var clock = new TestClock();
+        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        fm.ResetFireStatus();
+
+        SetGrill(smoker, 75);
+        fm.Tick();
+        Assert.True(igniter.IsOn);   // igniter lit for the cold start
+
+        // Climb +6F every 3.5 min from 75 toward 150. Total elapsed (~16 min) exceeds
+        // the 10 min igniter timeout, but steady progress keeps it alive.
+        foreach (var temp in new double[] { 81, 87, 93, 99, 105, 111, 117, 123, 129, 135, 141, 147 })
+        {
+            clock.Advance(TimeSpan.FromSeconds(210));
+            SetGrill(smoker, temp);
+            fm.Tick();
+
+            Assert.NotEqual(SmokerMode.Error, smoker.Mode);
+            Assert.True(igniter.IsOn);
+            Assert.False(fm.IsFireStarted);
+        }
+
+        // Crosses the ignition threshold — fire is established, igniter off.
+        SetGrill(smoker, 152);
+        fm.Tick();
+
+        Assert.True(fm.IsFireStarted);
+        Assert.False(igniter.IsOn);
+        Assert.NotEqual(SmokerMode.Error, smoker.Mode);
+    }
+
+    [Fact]
+    public void ColdStart_NoProgress_StillTimesOutToError()
+    {
+        // A genuinely dead light: igniter on, grill never rises. The progress reset
+        // never triggers, so the fixed igniter timeout still gives up.
+        var smoker = new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 250 };
+        var igniter = new FakeRelay();
+        var clock = new TestClock();
+        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        fm.ResetFireStatus();
+
+        SetGrill(smoker, 75);
+        fm.Tick();
+        Assert.True(igniter.IsOn);
+
+        // Flat for the whole igniter timeout → give up.
+        clock.Advance(TimeSpan.FromMinutes(11));
+        fm.Tick();
+
+        Assert.Equal(SmokerMode.Error, smoker.Mode);
+        Assert.False(igniter.IsOn);
+    }
+
+    [Fact]
     public void GetFireCheckTemp_SmokeMode_Returns140()
     {
         var smoker = new FakeSmoker { Mode = SmokerMode.Smoke };

@@ -33,6 +33,7 @@ namespace Inferno.Api.Services
         DateTime _fireCheckTime;
         DateTime? _belowCheckSince;
         double _recoveryHigh;
+        double _ignitionHigh;
         bool _fireStarted;
         int _ignitionTemp;
         bool _initialIgnition;
@@ -63,6 +64,7 @@ namespace Inferno.Api.Services
             _ignitionTemp = 150;
             _belowCheckSince = null;
             _recoveryHigh = 0;
+            _ignitionHigh = 0;
             _lidMonitor.Reset();
         }
 
@@ -118,11 +120,23 @@ namespace Inferno.Api.Services
                 _smoker.Temps.GrillTemp < _ignitionTemp &&
                 !_fireStarted)
             {
-                // The fire is not started, turn on the igniter
+                double grillTemp = _smoker.Temps.GrillTemp;
                 if (!_igniter.IsOn)
                 {
+                    // The fire is not started, turn on the igniter
                     _igniter.On();
-                    _ignitionTemp = Math.Max(_ignitionTemp, Convert.ToInt32(_smoker.Temps.GrillTemp) + 10);
+                    _ignitionTemp = Math.Max(_ignitionTemp, Convert.ToInt32(grillTemp) + 10);
+                    _igniterOnTime = _now();
+                    _ignitionHigh = grillTemp;
+                }
+                else if (grillTemp > _ignitionHigh + RecoveryProgressF)
+                {
+                    // The grill is climbing toward ignition — the fire is catching,
+                    // even if slowly. Reset the igniter give-up clock so a cold or
+                    // slow start isn't killed by the fixed deadline, mirroring the
+                    // recovery path below. A truly dead light (no temperature rise)
+                    // makes no progress and still times out.
+                    _ignitionHigh = grillTemp;
                     _igniterOnTime = _now();
                 }
             }
