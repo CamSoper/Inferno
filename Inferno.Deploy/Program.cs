@@ -130,9 +130,11 @@ return await Deployment.RunAsync(() =>
 
     // Step 1: Publish each project independently, triggered by its own source hash
     var publishOps = new Dictionary<string, LocalCommand>();
+    var sourceHashes = new Dictionary<string, string>();
     foreach (var svc in services)
     {
         var hash = SourceHash.Compute("..", serviceDeps[svc]);
+        sourceHashes[svc] = hash;
         publishOps[svc] = new LocalCommand($"publish-{svc}", new Pulumi.Command.Local.CommandArgs
         {
             Create = $"dotnet publish ../{projectMap[svc]} -c Release -o ../publish/{svc}",
@@ -226,10 +228,13 @@ return await Deployment.RunAsync(() =>
             Connection = conn,
             // enable (boot persistence) + restart (start now / pick up new files).
             Create = $"sudo systemctl enable inferno-{svc} && sudo systemctl restart inferno-{svc}",
-            // Restart when the copied artifacts change or the target host changes.
+            // Restart when the service's source (and thus the published + copied
+            // artifact) changes, or when the target host changes. Keying on
+            // copyOps[svc].Id never fired: CopyToRemote keeps a stable Id across
+            // re-copies, so a code-only change copied new files but never restarted.
             Triggers = new Input<object>[]
             {
-                copyOps[svc].Id.Apply(id => (object)id),
+                sourceHashes[svc],
                 targetId,
             },
         }, new CustomResourceOptions
