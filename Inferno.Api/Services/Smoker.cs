@@ -53,6 +53,26 @@ namespace Inferno.Api.Services
         /// </summary>
         double _uMin = 0.175;
 
+        /// <summary>
+        /// Fire-sustaining floor feed, used to ride out a lid-open temperature drop.
+        /// Keeps fuel on the fire without over-feeding an open, oxygen-rich firepot
+        /// (which would flare and overshoot when the lid closes). Never zero — that
+        /// would starve the fire. ~17% duty, in line with the PID floor (_uMin).
+        /// No recovery path may ever feed below this; the original starvation bug fed
+        /// ~5%, well under it.
+        /// </summary>
+        TimeSpan _maintenanceFeedRunTime = TimeSpan.FromSeconds(5);
+        TimeSpan _maintenanceFeedWaitTime = TimeSpan.FromSeconds(25);
+
+        /// <summary>
+        /// Aggressive feed to recover a genuinely struggling fire. FireMinder has the
+        /// igniter lit during recovery, so pellets light as they land. High duty with
+        /// a short off-gap (~75%): rebuilds the coal bed fast, but the gap lets each
+        /// charge catch before the next so fuel doesn't pile up and smother the embers.
+        /// </summary>
+        TimeSpan _recoveryFeedRunTime = TimeSpan.FromSeconds(15);
+        TimeSpan _recoveryFeedWaitTime = TimeSpan.FromSeconds(5);
+
         Task _modeLoopTask;
         DisplayUpdater _displayUpdater;
         FireMinder _fireMinder;
@@ -247,9 +267,18 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Smoke()
         {
+            if (_fireMinder.IsLidOpen)
+            {
+                // Lid open: ride out the temp drop on a maintenance feed and leave the
+                // PID untouched (returning here freezes it — no integral windup, no
+                // overshoot when the lid closes).
+                await MaintenanceFeed();
+                return;
+            }
+
             if (_fireMinder.IsReigniting)
             {
-                await ReignitionFeed();
+                await RecoveryFeed();
                 return;
             }
 
@@ -268,9 +297,18 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Hold()
         {
+            if (_fireMinder.IsLidOpen)
+            {
+                // Lid open: ride out the temp drop on a maintenance feed and leave the
+                // PID untouched (returning here freezes it — no integral windup, no
+                // overshoot when the lid closes).
+                await MaintenanceFeed();
+                return;
+            }
+
             if (_fireMinder.IsReigniting)
             {
-                await ReignitionFeed();
+                await RecoveryFeed();
                 return;
             }
 
@@ -357,14 +395,27 @@ namespace Inferno.Api.Services
 
 
         ///<summary>
-        /// Minimal auger feed during reignition to prevent pellet accumulation in the firepot.
-        /// Feeds just enough to give the igniter something to light without flooding.
+        /// Aggressive feed to recover a struggling fire. FireMinder lights the igniter
+        /// the moment the fire is declared unhealthy, so pellets ignite as they land
+        /// instead of accumulating. This rebuilds the coal bed rather than starving it.
         ///</summary>
-        private async Task ReignitionFeed()
+        private async Task RecoveryFeed()
         {
             _blower.On();
-            Debug.WriteLine("Reignition feed: minimal auger pulse.");
-            await RunAuger(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(57));
+            Debug.WriteLine("Recovery feed: aggressive auger to rebuild the fire.");
+            await RunAuger(_recoveryFeedRunTime, _recoveryFeedWaitTime);
+        }
+
+        ///<summary>
+        /// Minimal fire-sustaining feed while riding out a lid-open temperature drop.
+        /// Keeps fuel on the fire without over-feeding an open, oxygen-rich firepot.
+        /// Never zero — that would starve the fire.
+        ///</summary>
+        private async Task MaintenanceFeed()
+        {
+            _blower.On();
+            Debug.WriteLine("Maintenance feed: lid open, sustaining the fire.");
+            await RunAuger(_maintenanceFeedRunTime, _maintenanceFeedWaitTime);
         }
 
         ///<summary>
@@ -372,9 +423,18 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task Sear()
         {
+            if (_fireMinder.IsLidOpen)
+            {
+                // Lid open: ride out the temp drop on a maintenance feed and leave the
+                // PID untouched (returning here freezes it — no integral windup, no
+                // overshoot when the lid closes).
+                await MaintenanceFeed();
+                return;
+            }
+
             if (_fireMinder.IsReigniting)
             {
-                await ReignitionFeed();
+                await RecoveryFeed();
                 return;
             }
 
