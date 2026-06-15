@@ -30,4 +30,14 @@ var app = builder.Build();
 
 app.MapControllers();
 
+// On a clean stop (systemctl stop / SIGTERM / Ctrl-C), tear the smoker down so the
+// auger and igniter relays are de-energized instead of being left in their last
+// commanded state. Smoker.Dispose() drives a hard safe-off and releases the devices;
+// the shared GPIO controller is disposed afterward.
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    (app.Services.GetService<ISmoker>() as IDisposable)?.Dispose();
+    _gpio.Dispose();
+});
+
 app.Run();
