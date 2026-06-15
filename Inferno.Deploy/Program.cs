@@ -128,18 +128,29 @@ return await Deployment.RunAsync(() =>
     // Resolve ~ to absolute path (CopyToRemote and systemd don't expand ~)
     var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
 
-    // Step 1: Publish each project independently, triggered by its own source hash
+    // Step 1: Publish each project, triggered by its own source hash. Chain them so
+    // they run one at a time: every service references Inferno.Common, so parallel
+    // `dotnet publish` runs would rebuild Common concurrently and collide on its
+    // obj/bin outputs (MSBuild file locks). DependsOn on the previous publish
+    // serializes them and removes the contention.
     var publishOps = new Dictionary<string, LocalCommand>();
     var sourceHashes = new Dictionary<string, string>();
+    LocalCommand? previousPublish = null;
     foreach (var svc in services)
     {
         var hash = SourceHash.Compute("..", serviceDeps[svc]);
         sourceHashes[svc] = hash;
+        var publishOpts = new CustomResourceOptions();
+        if (previousPublish != null)
+        {
+            publishOpts.DependsOn.Add(previousPublish);
+        }
         publishOps[svc] = new LocalCommand($"publish-{svc}", new Pulumi.Command.Local.CommandArgs
         {
             Create = $"dotnet publish ../{projectMap[svc]} -c Release -o ../publish/{svc}",
             Triggers = new[] { hash },
-        });
+        }, publishOpts);
+        previousPublish = publishOps[svc];
     }
 
     // Step 2: Copy published artifacts to the Pi (Pulumi diffs the file archive)
