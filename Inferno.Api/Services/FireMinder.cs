@@ -37,10 +37,25 @@ namespace Inferno.Api.Services
         double _ignitionHigh;
         bool _fireStarted;
         int _ignitionTemp;
+        /// <summary>
+        /// Grill temperature at which the fire was first declared started, captured
+        /// once on the initial ignition. Unlike <see cref="_ignitionTemp"/> — which the
+        /// recovery path raises to the fire-check temp when relighting a struggling
+        /// fire — this stays anchored to where the fire actually caught. That lets Sear
+        /// gate its full-feed transition on a margin above the catch temp instead of a
+        /// fixed absolute temperature that a cold or windy firepot may never reach.
+        /// </summary>
+        int _initialIgnitionTemp;
         bool _initialIgnition;
 
         public bool IsFireHealthy => !_fireCheck;
         public bool IsFireStarted => _fireStarted;
+        /// <summary>
+        /// Grill temp (F) at which the fire was first declared started. Anchored to the
+        /// initial catch — never raised by recovery relights — so callers can derive a
+        /// relative establish threshold from it.
+        /// </summary>
+        public int InitialIgnitionTemp => _initialIgnitionTemp;
         public bool IsReigniting => _fireCheck && _igniter.IsOn;
         // Recovery dominates: never report a lid-open while we're actively recovering,
         // so the Smoker stays on the aggressive RecoveryFeed instead of the floor.
@@ -63,6 +78,9 @@ namespace Inferno.Api.Services
             _fireCheck = false;
             _initialIgnition = true;
             _ignitionTemp = 150;
+            // Conservative default so Sear's relative establish gate stays high until
+            // the fire actually catches (and overwrites this with the real catch temp).
+            _initialIgnitionTemp = 150;
             _belowCheckSince = null;
             _recoveryHigh = 0;
             _ignitionHigh = 0;
@@ -177,6 +195,12 @@ namespace Inferno.Api.Services
                 if(_smoker.Temps.GrillTemp >= _ignitionTemp)
                 {
                     // The fire has started, make sure the igniter is off
+                    if (!_fireStarted)
+                    {
+                        // Capture where the fire caught, once. Recovery may later raise
+                        // _ignitionTemp, but this anchor must stay at the initial catch.
+                        _initialIgnitionTemp = _ignitionTemp;
+                    }
                     _fireStarted = true;
                     _igniter.Off();
                 }

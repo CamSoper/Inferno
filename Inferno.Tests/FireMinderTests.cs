@@ -183,6 +183,60 @@ public class FireMinderTests
     }
 
     [Fact]
+    public void InitialIgnitionTemp_DefaultsToFloor_BeforeFireStarts()
+    {
+        var smoker = new FakeSmoker { Mode = SmokerMode.Sear, SetPoint = 400 };
+        var igniter = new FakeRelay();
+        var fm = new FireMinder(smoker, igniter, autoStart: false);
+        fm.ResetFireStatus();
+
+        // Before the fire catches, the anchor sits at the 150F floor so Sear's
+        // relative establish gate stays conservative.
+        Assert.False(fm.IsFireStarted);
+        Assert.Equal(150, fm.InitialIgnitionTemp);
+    }
+
+    [Fact]
+    public void ColdStart_CapturesInitialIgnitionTempAtCatch()
+    {
+        var smoker = new FakeSmoker { Mode = SmokerMode.Sear, SetPoint = 400 };
+        var igniter = new FakeRelay();
+        var clock = new TestClock();
+        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        fm.ResetFireStatus();
+
+        SetGrill(smoker, 75);
+        fm.Tick();                       // igniter lights; ignition temp floors at 150
+        Assert.True(igniter.IsOn);
+        Assert.False(fm.IsFireStarted);
+
+        SetGrill(smoker, 152);
+        fm.Tick();                       // crosses 150 → fire started
+
+        Assert.True(fm.IsFireStarted);
+        Assert.Equal(150, fm.InitialIgnitionTemp);
+    }
+
+    [Fact]
+    public void InitialIgnitionTemp_UnchangedByRecoveryRelight()
+    {
+        // EstablishedFire catches cold (grill jumps to 200 over the 150 floor).
+        var (fm, smoker, igniter, clock) = EstablishedFire();
+        Assert.Equal(150, fm.InitialIgnitionTemp);
+
+        // Trip recovery: the relight raises the internal ignition threshold to the
+        // fire-check temp (195), but the initial-catch anchor must stay put so Sear's
+        // establish gate doesn't drift upward after a recovery.
+        SetGrill(smoker, 180);
+        fm.Tick();
+        clock.Advance(TimeSpan.FromSeconds(46));
+        fm.Tick();
+        Assert.True(fm.IsReigniting);
+
+        Assert.Equal(150, fm.InitialIgnitionTemp);
+    }
+
+    [Fact]
     public void BriefDip_RecoversBeforeDebounce_DoesNotTrip()
     {
         var (fm, smoker, igniter, clock) = EstablishedFire();
