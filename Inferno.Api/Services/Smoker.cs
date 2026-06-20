@@ -28,6 +28,16 @@ namespace Inferno.Api.Services
         int _maxGrillTemp = 425;
 
         /// <summary>
+        /// In Sear, how far above the ignition temperature the grill must climb before
+        /// the auger switches from the gentle establishing feed to a continuous full
+        /// feed. A margin relative to where the fire actually caught — not a fixed
+        /// absolute temp — so a cold or windy start (where the firepot settles lower)
+        /// still reaches full feed instead of stalling under the old absolute 180F gate.
+        /// Lower this if the worst windy days still stall before full feed.
+        /// </summary>
+        int _searEstablishMargin = 25;
+
+        /// <summary>
         /// Timeout for the blower to run after shutdown.
         /// </summary>
         TimeSpan _shutdownBlowerTimeout = TimeSpan.FromMinutes(10);
@@ -489,9 +499,10 @@ namespace Inferno.Api.Services
                return;
             }
 
-            if (_rtdArray.GrillTemp < _minSetPoint)
+            int establishTemp = _fireMinder.InitialIgnitionTemp + _searEstablishMargin;
+            if (_rtdArray.GrillTemp < establishTemp)
             {
-                Debug.WriteLine($"Sear: Grill temp {_rtdArray.GrillTemp} below {_minSetPoint}. Diverting to SMOKE to establish fire.");
+                Debug.WriteLine($"Sear: Grill temp {_rtdArray.GrillTemp} below establish temp {establishTemp} (ignition {_fireMinder.InitialIgnitionTemp} + {_searEstablishMargin}). Diverting to SMOKE to establish fire.");
                 await Smoke();
                 return;
             }
