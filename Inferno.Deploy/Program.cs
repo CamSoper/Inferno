@@ -128,6 +128,19 @@ return await Deployment.RunAsync(() =>
     // Resolve ~ to absolute path (CopyToRemote and systemd don't expand ~)
     var absoluteRemotePath = remotePath.Replace("~", $"/home/{piUser}");
 
+    // Step 0c: Ensure the cook-history data dir exists. The API writes
+    // ~/inferno/data/inferno.db here; it sits OUTSIDE the publish dirs the deploy
+    // replaces so history survives upgrades. Owned by piUser (the service runs as
+    // User=pi, no systemd ProtectHome/ReadWritePaths sandboxing), so it's writable
+    // as-is. If sandboxing is ever added, also set ReadWritePaths={dataPath}.
+    var dataPath = $"{absoluteRemotePath}/data";
+    var ensureDataDir = new RemoteCommand("ensure-data-dir", new Pulumi.Command.Remote.CommandArgs
+    {
+        Connection = conn,
+        Create = $"mkdir -p {dataPath} && echo 'data dir ready'",
+        Triggers = new[] { targetId },
+    }, new CustomResourceOptions { DependsOn = { configureSshEnv } });
+
     // Step 1: Publish each project, triggered by its own source hash. Chain them so
     // they run one at a time: every service references Inferno.Common, so parallel
     // `dotnet publish` runs would rebuild Common concurrently and collide on its
@@ -250,7 +263,8 @@ return await Deployment.RunAsync(() =>
             },
         }, new CustomResourceOptions
         {
-            DependsOn = { copyOps[svc], setupServices },
+            // ensureDataDir gates the api start so the DB's parent dir exists first.
+            DependsOn = { copyOps[svc], setupServices, ensureDataDir },
         });
     }
 

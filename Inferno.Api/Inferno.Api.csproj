@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <PackageReference Include="IoT.Device.Bindings" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.*" />
   </ItemGroup>
 
   <ItemGroup>
