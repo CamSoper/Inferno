@@ -90,9 +90,12 @@ namespace Inferno.Api.Devices
                 if (disposing)
                 {
                     DisplayText("Shutting down...", "", "", "Goodbye!".PadLeft(20));
-                    _i2c.Dispose();
+                    // Dispose in dependency order (mirrors Init's teardown): the LCD
+                    // writes through the driver to the I2C bus on Dispose, so the bus
+                    // must outlive both. Disposing _i2c first would throw here.
                     _lcd.Dispose();
                     _driver.Dispose();
+                    _i2c.Dispose();
                 }
                 disposedValue = true;
             }

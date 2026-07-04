@@ -2,6 +2,7 @@ using Inferno.Api.Interfaces;
 using Inferno.Api.Services;
 using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Inferno.Tests;
 
@@ -34,30 +35,23 @@ public class FireMinderTests
         }
     }
 
-    /// <summary>Mutable clock so tests can advance time between Tick() calls.</summary>
-    private sealed class TestClock
-    {
-        public DateTime Now = new DateTime(2026, 1, 1, 12, 0, 0);
-        public void Advance(TimeSpan t) => Now += t;
-    }
-
     private static void SetGrill(FakeSmoker smoker, double temp) =>
         smoker.Temps = new Temps { GrillTemp = temp, ProbeTemp = temp };
 
     /// <summary>
     /// Builds a FireMinder that does NOT auto-run its loop, drives it to an
-    /// "established healthy fire" state (Hold @ 225, check temp = 195), and returns
+    /// "established healthy fire" state (Hold @ 225, check temp = 187), and returns
     /// the pieces so the test can manipulate temp/clock and call Tick() directly.
     /// </summary>
-    private static (FireMinder fm, FakeSmoker smoker, FakeRelay igniter, TestClock clock) EstablishedFire()
+    private static (FireMinder fm, FakeSmoker smoker, FakeRelay igniter, FakeTimeProvider clock) EstablishedFire()
     {
         var smoker = new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 225 };
         var igniter = new FakeRelay();
-        var clock = new TestClock();
-        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        var clock = new FakeTimeProvider();
+        var fm = new FireMinder(smoker, igniter, clock, autoStart: false);
         fm.ResetFireStatus();
 
-        // Two ticks above the check temp (195) proves the fire: first sets
+        // Two ticks above the check temp (187) proves the fire: first sets
         // _fireStarted, second clears _initialIgnition.
         SetGrill(smoker, 200);
         fm.Tick();
@@ -78,8 +72,8 @@ public class FireMinderTests
         // instead of killing a fire that's plainly catching.
         var smoker = new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 250 };
         var igniter = new FakeRelay();
-        var clock = new TestClock();
-        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        var clock = new FakeTimeProvider();
+        var fm = new FireMinder(smoker, igniter, clock, autoStart: false);
         fm.ResetFireStatus();
 
         SetGrill(smoker, 75);
@@ -115,8 +109,8 @@ public class FireMinderTests
         // never triggers, so the fixed igniter timeout still gives up.
         var smoker = new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 250 };
         var igniter = new FakeRelay();
-        var clock = new TestClock();
-        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        var clock = new FakeTimeProvider();
+        var fm = new FireMinder(smoker, igniter, clock, autoStart: false);
         fm.ResetFireStatus();
 
         SetGrill(smoker, 75);
@@ -144,6 +138,8 @@ public class FireMinderTests
     [Theory]
     [InlineData(225)]
     [InlineData(300)]
+    [InlineData(359)]
+    [InlineData(360)]
     [InlineData(400)]
     public void GetFireCheckTemp_HoldMode_ReturnsExpected(int setPoint)
     {
@@ -151,8 +147,23 @@ public class FireMinderTests
         var igniter = new FakeRelay();
         var fm = new FireMinder(smoker, igniter, autoStart: false);
 
-        int expected = setPoint - (setPoint / 180 * 30);
+        // 5/6 of the setpoint (a 30F margin at the 180F floor), as a smooth curve.
+        int expected = (int)(setPoint * (150.0 / 180.0));
         Assert.Equal(expected, fm.GetFireCheckTemp());
+    }
+
+    [Fact]
+    public void GetFireCheckTemp_HoldMode_HasNoCliffAtSetpoint360()
+    {
+        // Regression guard: the old integer `SetPoint / 180` made this a step function
+        // with a ~30F jump between setpoint 359 and 360. The proportional formula must
+        // stay continuous there.
+        var igniter = new FakeRelay();
+        var below = new FireMinder(new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 359 }, igniter, autoStart: false);
+        var at = new FireMinder(new FakeSmoker { Mode = SmokerMode.Hold, SetPoint = 360 }, igniter, autoStart: false);
+
+        Assert.True(Math.Abs(at.GetFireCheckTemp() - below.GetFireCheckTemp()) <= 2,
+            $"Expected a smooth threshold across setpoint 360, got {below.GetFireCheckTemp()} → {at.GetFireCheckTemp()}");
     }
 
     [Fact]
@@ -201,8 +212,8 @@ public class FireMinderTests
     {
         var smoker = new FakeSmoker { Mode = SmokerMode.Sear, SetPoint = 400 };
         var igniter = new FakeRelay();
-        var clock = new TestClock();
-        var fm = new FireMinder(smoker, igniter, () => clock.Now, autoStart: false);
+        var clock = new FakeTimeProvider();
+        var fm = new FireMinder(smoker, igniter, clock, autoStart: false);
         fm.ResetFireStatus();
 
         SetGrill(smoker, 75);
@@ -225,7 +236,7 @@ public class FireMinderTests
         Assert.Equal(150, fm.InitialIgnitionTemp);
 
         // Trip recovery: the relight raises the internal ignition threshold to the
-        // fire-check temp (195), but the initial-catch anchor must stay put so Sear's
+        // fire-check temp (187), but the initial-catch anchor must stay put so Sear's
         // establish gate doesn't drift upward after a recovery.
         SetGrill(smoker, 180);
         fm.Tick();
@@ -241,7 +252,7 @@ public class FireMinderTests
     {
         var (fm, smoker, igniter, clock) = EstablishedFire();
 
-        // Dip below check temp (195), but recover before the 45s debounce elapses.
+        // Dip below check temp (187), but recover before the 45s debounce elapses.
         SetGrill(smoker, 180);
         fm.Tick();
         Assert.True(fm.IsFireHealthy);   // not declared unhealthy yet
@@ -261,7 +272,7 @@ public class FireMinderTests
     {
         var (fm, smoker, igniter, clock) = EstablishedFire();
 
-        SetGrill(smoker, 180);           // below check temp (195)
+        SetGrill(smoker, 180);           // below check temp (187)
         fm.Tick();
         Assert.True(fm.IsFireHealthy);   // debounce not yet satisfied
         Assert.False(igniter.IsOn);
@@ -317,7 +328,7 @@ public class FireMinderTests
     {
         var (fm, smoker, igniter, clock) = EstablishedFire();
 
-        // Drop well below check temp (195) and trip recovery.
+        // Drop well below check temp (187) and trip recovery.
         SetGrill(smoker, 160);
         fm.Tick();
         clock.Advance(TimeSpan.FromSeconds(46));
@@ -325,9 +336,9 @@ public class FireMinderTests
         Assert.True(fm.IsReigniting);
 
         // Climb slowly: +6F every 3.5 min, staying below the check temp. Total elapsed
-        // (~17 min) far exceeds the 10 min fire/igniter timeouts, but each step is
+        // (~14 min) far exceeds the 10 min fire/igniter timeouts, but each step is
         // upward progress so the give-up clocks keep resetting.
-        foreach (var temp in new double[] { 166, 172, 178, 184, 190 })
+        foreach (var temp in new double[] { 166, 172, 178, 184 })
         {
             clock.Advance(TimeSpan.FromSeconds(210));
             SetGrill(smoker, temp);
@@ -409,7 +420,7 @@ public class FireMinderTests
         fm.Tick();
         Assert.True(fm.IsLidOpen);
 
-        // Even though temp (165) is below the check temp (195), and time passes,
+        // Even though temp (165) is below the check temp (187), and time passes,
         // the fire is NOT declared unhealthy and the igniter stays off.
         clock.Advance(TimeSpan.FromSeconds(60));
         fm.Tick();
@@ -418,5 +429,44 @@ public class FireMinderTests
         Assert.True(fm.IsFireHealthy);
         Assert.False(igniter.IsOn);
         Assert.False(fm.IsReigniting);
+    }
+
+    [Fact]
+    public void SensorFault_SustainedInvalidGrill_FailsSafeToError()
+    {
+        var (fm, smoker, igniter, clock) = EstablishedFire();
+
+        // The grill sensor drops out — the Smoker surfaces -1. A sustained fault must
+        // fail safe to Error rather than driving the aggressive recovery feed off a
+        // garbage temperature (the old behavior: -1 read as a dying fire → reignite).
+        for (int i = 0; i < 5; i++) // SensorFaultTicks
+        {
+            Assert.NotEqual(SmokerMode.Error, smoker.Mode);
+            SetGrill(smoker, -1);
+            fm.Tick();
+        }
+
+        Assert.Equal(SmokerMode.Error, smoker.Mode);
+        Assert.False(igniter.IsOn);
+        Assert.False(fm.IsReigniting);
+    }
+
+    [Fact]
+    public void SensorFault_BriefInvalidBurst_DoesNotTrip()
+    {
+        var (fm, smoker, igniter, clock) = EstablishedFire();
+
+        // A short burst of invalid readings (below the fault threshold) followed by a
+        // good one: the counter resets and the cook continues untouched.
+        SetGrill(smoker, -1);
+        fm.Tick();
+        SetGrill(smoker, -1);
+        fm.Tick();
+        SetGrill(smoker, 200);
+        fm.Tick();
+
+        Assert.NotEqual(SmokerMode.Error, smoker.Mode);
+        Assert.True(fm.IsFireHealthy);
+        Assert.False(igniter.IsOn);
     }
 }
