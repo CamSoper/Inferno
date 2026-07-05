@@ -1,8 +1,9 @@
-using System.Diagnostics;
 using Inferno.Api.Interfaces;
 using Inferno.Common.Extensions;
 using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Inferno.Api.Services
 {
@@ -10,12 +11,23 @@ namespace Inferno.Api.Services
     {
         ISmoker _smoker;
         IRelayDevice _igniter;
-        Func<DateTime> _now;
+        // Monotonic clock: durations are measured with GetTimestamp/GetElapsedTime so
+        // an NTP step (the Pi has no RTC) can't spuriously trip or hang a timeout.
+        TimeProvider _timeProvider;
+        readonly ILogger<FireMinder> _logger;
         LidMonitor _lidMonitor;
         Task _fireMinderLoop;
         readonly CancellationTokenSource _stopCts = new();
         TimeSpan _igniterTimeout = TimeSpan.FromMinutes(10);
         TimeSpan _fireTimeout = TimeSpan.FromMinutes(10);
+        /// <summary>
+        /// Consecutive cooking-mode ticks with an invalid grill reading before we
+        /// fail safe to Error. RtdArray already debounces ~2s of bad ADC reads before
+        /// surfacing NaN, so a few ticks here guards against a lone glitch while still
+        /// reacting within seconds to a genuinely dead sensor.
+        /// </summary>
+        const int SensorFaultTicks = 5;
+        int _invalidGrillTicks;
         /// <summary>
         /// How long the grill must stay continuously below the fire-check temp before
         /// the fire is declared unhealthy. Debounces transient dips (e.g. a quick lid
@@ -29,10 +41,10 @@ namespace Inferno.Api.Services
         /// enough to track a real climb, large enough to ignore sensor noise.
         /// </summary>
         const double RecoveryProgressF = 5.0;
-        DateTime _igniterOnTime;
+        long _igniterOnTimestamp;
         bool _fireCheck;
-        DateTime _fireCheckTime;
-        DateTime? _belowCheckSince;
+        long _fireCheckTimestamp;
+        long? _belowCheckSince;
         double _recoveryHigh;
         double _ignitionHigh;
         bool _fireStarted;
@@ -61,11 +73,12 @@ namespace Inferno.Api.Services
         // so the Smoker stays on the aggressive RecoveryFeed instead of the floor.
         public bool IsLidOpen => _lidMonitor.IsLidOpen && !_fireCheck;
 
-        public FireMinder(ISmoker smoker, IRelayDevice igniter, Func<DateTime>? clock = null, bool autoStart = true)
+        public FireMinder(ISmoker smoker, IRelayDevice igniter, TimeProvider? timeProvider = null, bool autoStart = true, ILogger<FireMinder>? logger = null)
         {
             _smoker = smoker;
             _igniter = igniter;
-            _now = clock ?? (() => DateTime.Now);
+            _timeProvider = timeProvider ?? TimeProvider.System;
+            _logger = logger ?? NullLogger<FireMinder>.Instance;
             _lidMonitor = new LidMonitor();
             // Tests drive Tick() directly with a controllable clock; skip the live loop.
             _fireMinderLoop = autoStart ? FireMinderLoop() : Task.CompletedTask;
@@ -73,7 +86,7 @@ namespace Inferno.Api.Services
 
         public void ResetFireStatus()
         {
-            Debug.WriteLine("Resetting fire status.");
+            _logger.LogDebug("Resetting fire status.");
             _fireStarted = false;
             _fireCheck = false;
             _initialIgnition = true;
@@ -84,6 +97,7 @@ namespace Inferno.Api.Services
             _belowCheckSince = null;
             _recoveryHigh = 0;
             _ignitionHigh = 0;
+            _invalidGrillTicks = 0;
             _lidMonitor.Reset();
         }
 
@@ -95,13 +109,18 @@ namespace Inferno.Api.Services
             }
             else
             {
-                return _smoker.SetPoint - (_smoker.SetPoint / 180 * 30);
+                // Fire-check temp is a fixed fraction of the setpoint: a 30F margin at
+                // the 180F floor (150F), scaling proportionally with setpoint. The math
+                // is deliberately floating-point — the old integer `SetPoint / 180`
+                // collapsed to a step function, putting a ~30F cliff in the threshold
+                // at setpoint 360.
+                return (int)(_smoker.SetPoint * (150.0 / 180.0));
             }
         }
 
         private async Task FireMinderLoop()
         {
-            Debug.WriteLine("Starting Fire Minder thread.");
+            _logger.LogDebug("Starting Fire Minder loop.");
             ResetFireStatus();
             while (!_stopCts.IsCancellationRequested)
             {
@@ -116,9 +135,10 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    string errorText = $"{_now()} Fire Minder loop exception! {ex} {ex.StackTrace}";
-                    Console.WriteLine(errorText);
-                    Debug.WriteLine(errorText);
+                    _logger.LogError(ex, "Fire Minder loop exception.");
+                    // Back off after a fault so a persistent throw can't hot-spin.
+                    try { await Task.Delay(TimeSpan.FromSeconds(1), _stopCts.Token); }
+                    catch (OperationCanceledException) { break; }
                 }
             }
         }
@@ -135,10 +155,30 @@ namespace Inferno.Api.Services
         /// </summary>
         internal void Tick()
         {
-            // Feed the lid detector during cooking; otherwise keep it clear.
-            if (_smoker.Mode.IsCookingMode())
+            double currentGrill = _smoker.Temps.GrillTemp;
+            bool cooking = _smoker.Mode.IsCookingMode();
+
+            // Sensor-fault fail-safe: a sustained invalid grill reading during a cook
+            // (NaN, or the -1 "unplugged" sentinel the Smoker surfaces) means we're
+            // managing fire blind. Never drive ignition or the aggressive recovery
+            // feed off a garbage temperature — fail safe to Error, where the Smoker
+            // cuts fuel and igniter and runs the blower to clear the firepot.
+            if (cooking && (double.IsNaN(currentGrill) || currentGrill < 0))
             {
-                _lidMonitor.Update(_smoker.Temps.GrillTemp);
+                if (++_invalidGrillTicks >= SensorFaultTicks)
+                {
+                    _logger.LogError("Grill sensor fault: {Ticks} consecutive invalid readings during cook. Setting error mode.", _invalidGrillTicks);
+                    _igniter.Off();
+                    _smoker.SetMode(SmokerMode.Error);
+                }
+                return;
+            }
+            _invalidGrillTicks = 0;
+
+            // Feed the lid detector during cooking; otherwise keep it clear.
+            if (cooking)
+            {
+                _lidMonitor.Update(currentGrill);
             }
             else
             {
@@ -155,7 +195,7 @@ namespace Inferno.Api.Services
                     // The fire is not started, turn on the igniter
                     _igniter.On();
                     _ignitionTemp = Math.Max(_ignitionTemp, Convert.ToInt32(grillTemp) + 10);
-                    _igniterOnTime = _now();
+                    _igniterOnTimestamp = _timeProvider.GetTimestamp();
                     _ignitionHigh = grillTemp;
                 }
                 else if (grillTemp > _ignitionHigh + RecoveryProgressF)
@@ -166,7 +206,7 @@ namespace Inferno.Api.Services
                     // recovery path below. A truly dead light (no temperature rise)
                     // makes no progress and still times out.
                     _ignitionHigh = grillTemp;
-                    _igniterOnTime = _now();
+                    _igniterOnTimestamp = _timeProvider.GetTimestamp();
                 }
             }
 
@@ -180,12 +220,10 @@ namespace Inferno.Api.Services
             }
 
             if (_igniter.IsOn &&
-                    _now() - _igniterOnTime > _igniterTimeout)
+                    _timeProvider.GetElapsedTime(_igniterOnTimestamp) > _igniterTimeout)
             {
                 // The igniter has been on for too long, shut it off and go to error mode
-                string errorText = $"{_now()} Igniter timeout. Setting error mode.";
-                Debug.WriteLine(errorText);
-                Console.WriteLine(errorText);
+                _logger.LogError("Igniter timeout after {Timeout}. Setting error mode.", _igniterTimeout);
                 _igniter.Off();
                 _smoker.SetMode(SmokerMode.Error);
             }
@@ -231,15 +269,13 @@ namespace Inferno.Api.Services
                         // timeout) so a slow-but-steady recovery isn't killed by a
                         // fixed deadline.
                         _recoveryHigh = grillTemp;
-                        _fireCheckTime = _now();
-                        _igniterOnTime = _now();
+                        _fireCheckTimestamp = _timeProvider.GetTimestamp();
+                        _igniterOnTimestamp = _timeProvider.GetTimestamp();
                     }
-                    else if (_now() - _fireCheckTime > _fireTimeout)
+                    else if (_timeProvider.GetElapsedTime(_fireCheckTimestamp) > _fireTimeout)
                     {
                         // No upward progress for the whole timeout — the fire is out.
-                        string errorText = $"{_now()} Fire timeout. Setting error mode.";
-                        Debug.WriteLine(errorText);
-                        Console.WriteLine(errorText);
+                        _logger.LogError("Fire timeout: no recovery progress in {Timeout}. Setting error mode.", _fireTimeout);
                         _smoker.SetMode(SmokerMode.Error);
                     }
                 }
@@ -256,21 +292,21 @@ namespace Inferno.Api.Services
                     // debounce window before declaring it unhealthy.
                     if (_belowCheckSince == null)
                     {
-                        _belowCheckSince = _now();
+                        _belowCheckSince = _timeProvider.GetTimestamp();
                     }
 
-                    if (_now() - _belowCheckSince >= _fireCheckDebounce)
+                    if (_timeProvider.GetElapsedTime(_belowCheckSince.Value) >= _fireCheckDebounce)
                     {
                         // Sustained decline — declare unhealthy and light the igniter
                         // immediately so the recovery feed has an ignition source.
                         _fireCheck = true;
-                        _fireCheckTime = _now();
+                        _fireCheckTimestamp = _timeProvider.GetTimestamp();
                         _recoveryHigh = grillTemp;
                         if (!_igniter.IsOn)
                         {
                             _igniter.On();
                             _ignitionTemp = Math.Max(150, checkTemp);
-                            _igniterOnTime = _now();
+                            _igniterOnTimestamp = _timeProvider.GetTimestamp();
                         }
                     }
                 }

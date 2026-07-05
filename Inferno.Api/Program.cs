@@ -20,11 +20,23 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
-builder.Services.AddSingleton<ISmoker>(new Smoker(new Auger(_gpio, 22),
-                                                new Blower(_gpio, 21),
-                                                new Igniter(_gpio, 23),
-                                                new RtdArray(_spi),
-                                                new Display()));
+// Monotonic + wall clock, injectable so time-based logic can be driven in tests.
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Build the smoker from the DI container so its collaborators get real loggers
+// (and journald output) instead of Debug traces that vanish in a Release build.
+builder.Services.AddSingleton<ISmoker>(sp =>
+{
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    var timeProvider = sp.GetRequiredService<TimeProvider>();
+    return new Smoker(new Auger(_gpio, 22),
+                      new Blower(_gpio, 21),
+                      new Igniter(_gpio, 23),
+                      new RtdArray(_spi, loggerFactory.CreateLogger<RtdArray>()),
+                      new Display(),
+                      loggerFactory,
+                      timeProvider);
+});
 
 var app = builder.Build();
 

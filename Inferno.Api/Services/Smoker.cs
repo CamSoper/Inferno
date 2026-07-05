@@ -1,9 +1,9 @@
-using System.Diagnostics;
 using Inferno.Api.Interfaces;
 using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
 using Inferno.Api.Pid;
 using Inferno.Common.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Inferno.Api.Services
 {
@@ -15,6 +15,11 @@ namespace Inferno.Api.Services
         IRelayDevice _igniter;
         IRtdArray _rtdArray;
         IDisplay _display;
+        readonly ILogger<Smoker> _logger;
+        // Monotonic clock for durations (shutdown cooldown), plus wall time for the
+        // status timestamps. Injected so a Pi's NTP step can't corrupt elapsed-time
+        // measurements and so tests can drive time deterministically.
+        readonly TimeProvider _timeProvider;
 
         int _setPoint;
         /// <summary>
@@ -47,7 +52,7 @@ namespace Inferno.Api.Services
         /// The PID determines a period of time to run the auger as a percentage of this time.
         /// Also used in Sear mode to determine how long to run the auger when the grill is too hot.
         /// </summary>
-        TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
+        TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
 
         // Per-mode token: cancelled by SetMode to interrupt the running mode's delay.
         // Guarded by _ctsLock so SetMode's Cancel() can never race ModeLoop's Dispose().
@@ -57,7 +62,10 @@ namespace Inferno.Api.Services
         readonly CancellationTokenSource _lifetimeCts = new();
         SmokerPid _pid;
         DateTime _lastModeChange;
- 
+        // Monotonic timestamp of the last mode change, used for the shutdown-cooldown
+        // duration so a wall-clock step can't cut the cooldown short or hang it.
+        long _lastModeChangeTimestamp;
+
         /// <summary>
         /// Maximum value for the PID output. This is the maximum amount of the "hold" cycle time that the auger will run.
         /// </summary>
@@ -98,23 +106,28 @@ namespace Inferno.Api.Services
                         IRelayDevice blower,
                         IRelayDevice igniter,
                         IRtdArray rtdArray,
-                        IDisplay display)
+                        IDisplay display,
+                        ILoggerFactory loggerFactory,
+                        TimeProvider? timeProvider = null)
         {
             _auger = auger;
             _blower = blower;
             _igniter = igniter;
             _rtdArray = rtdArray;
             _display = display;
+            _logger = loggerFactory.CreateLogger<Smoker>();
+            _timeProvider = timeProvider ?? TimeProvider.System;
 
             _mode = SmokerMode.Ready;
             _setPoint = _minSetPoint;
-            _lastModeChange = DateTime.Now;
+            _lastModeChange = _timeProvider.GetLocalNow().DateTime;
+            _lastModeChangeTimestamp = _timeProvider.GetTimestamp();
             PValue = 2;
 
-            _pid = new SmokerPid(60.0, 180.0, 45.0);
+            _pid = new SmokerPid(60.0, 180.0, 45.0, _timeProvider, loggerFactory.CreateLogger<SmokerPid>());
 
-            _displayUpdater = new DisplayUpdater(this, _display);
-            _fireMinder = new FireMinder(this, _igniter);
+            _displayUpdater = new DisplayUpdater(this, _display, loggerFactory.CreateLogger<DisplayUpdater>());
+            _fireMinder = new FireMinder(this, _igniter, _timeProvider, logger: loggerFactory.CreateLogger<FireMinder>());
             _preheatMonitor = new PreheatMonitor();
             _modeLoopTask = ModeLoop();
             _preheatLoopTask = PreheatLoop();
@@ -166,14 +179,14 @@ namespace Inferno.Api.Services
                     SetPoint = _setPoint,
                     PValue = _pValue,
                     ModeTime = _lastModeChange,
-                    CurrentTime = DateTime.Now
+                    CurrentTime = _timeProvider.GetLocalNow().DateTime
                 };
             }
         }
         
         public bool SetMode(SmokerMode newMode)
         {
-            Debug.WriteLine($"Setting mode {newMode}.");
+            _logger.LogInformation("Setting mode {NewMode}.", newMode);
 
             SmokerMode currentMode = _mode;
 
@@ -221,7 +234,8 @@ namespace Inferno.Api.Services
             }
 
             _mode = newMode;
-            _lastModeChange = DateTime.Now;
+            _lastModeChange = _timeProvider.GetLocalNow().DateTime;
+            _lastModeChangeTimestamp = _timeProvider.GetTimestamp();
             // Interrupt the running mode's in-flight delay. ModeLoop owns disposal of
             // the token (under the same lock), so cancelling here is always safe.
             lock (_ctsLock)
@@ -239,7 +253,7 @@ namespace Inferno.Api.Services
         ///</summary>
         private async Task ModeLoop()
         {
-            Debug.WriteLine("Starting mode thread.");
+            _logger.LogDebug("Starting mode loop.");
             while (!_lifetimeCts.IsCancellationRequested)
             {
                 // Fresh per-mode token, linked to the lifetime token so Dispose() also
@@ -280,9 +294,11 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    string errorText = $"{DateTime.Now} Mode loop exception! {ex} {ex.StackTrace}";
-                    Console.WriteLine(errorText);
-                    Debug.WriteLine(errorText);
+                    _logger.LogError(ex, "Mode loop exception in {Mode} mode.", _mode);
+                    // Back off briefly so a persistently-throwing mode method can't
+                    // spin the loop at 100% CPU.
+                    try { await Task.Delay(TimeSpan.FromSeconds(1), _lifetimeCts.Token); }
+                    catch (OperationCanceledException) { break; }
                 }
 
             }
@@ -310,7 +326,7 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"{DateTime.Now} Preheat loop exception! {ex.Message}");
+                    _logger.LogError(ex, "Preheat loop exception.");
                 }
             }
         }
@@ -342,7 +358,7 @@ namespace Inferno.Api.Services
             await RunAuger(TimeSpan.FromSeconds(15), waitTime);
             if (_cts.IsCancellationRequested)
             {
-                Debug.WriteLine("Smoke mode cancelled.");
+                _logger.LogDebug("Smoke mode cancelled.");
             }
         }
 
@@ -370,28 +386,28 @@ namespace Inferno.Api.Services
 
             if (_igniter.IsOn && !_fireMinder.IsFireStarted)
             {
-               Debug.WriteLine("Hold: Igniter is on during startup. Diverting to SMOKE mode.");
+               _logger.LogDebug("Hold: Igniter is on during startup. Diverting to Smoke mode.");
                await Smoke();
                return;
             }
 
             if (_setPoint == _maxSetPoint && _rtdArray.GrillTemp < _setPoint)
             {
-                Debug.WriteLine("Hold: Max setting. Skipping the PID, just running the auger.");
+                _logger.LogDebug("Hold: Max setting. Skipping the PID, running the auger continuously.");
                 await RunAuger();
                 return;
             }
 
             if (_pid.SetPoint != _setPoint)
             {
-                Debug.WriteLine($"PID setpoint: {_pid.SetPoint}. Actual Setpoint: {SetPoint}. Updating.");
+                _logger.LogDebug("Updating PID setpoint from {PidSetPoint} to {SetPoint}.", _pid.SetPoint, SetPoint);
                 _pid.SetPoint = _setPoint;
             }
 
             double u = _pid.GetControlVariable(_rtdArray.GrillTemp).Clamp(_uMin, _uMax);
             if(double.IsNaN(u))
             {
-                Debug.WriteLine($"Hold: PID returned NaN. Setting u to {_uMin}.");
+                _logger.LogWarning("Hold: PID returned NaN. Falling back to minimum duty {UMin}.", _uMin);
                 u = _uMin;
             }
             
@@ -409,16 +425,17 @@ namespace Inferno.Api.Services
 
         private async Task RunAuger(TimeSpan RunTime, TimeSpan WaitTime)
         {
-            Debug.WriteLine($"Auger running: {RunTime.Seconds} seconds.");
+            _logger.LogTrace("Auger running for {RunSeconds:F0}s, waiting {WaitSeconds:F0}s.",
+                RunTime.TotalSeconds, WaitTime.TotalSeconds);
             // Run the auger
             _auger.On();
             try
             {
                 await Task.Delay(RunTime, _cts.Token);
             }
-            catch (TaskCanceledException ex)
+            catch (TaskCanceledException)
             {
-                Debug.WriteLine($"{ex} Cancelled while auger running.");
+                _logger.LogTrace("Cancelled while auger running.");
                 return;
             }
 
@@ -427,9 +444,9 @@ namespace Inferno.Api.Services
             {
                 await Task.Delay(WaitTime, _cts.Token);
             }
-            catch (TaskCanceledException ex)
+            catch (TaskCanceledException)
             {
-                Debug.WriteLine($"{ex} Cancelled while auger waiting.");
+                _logger.LogTrace("Cancelled while auger waiting.");
             }
         }
 
@@ -441,9 +458,9 @@ namespace Inferno.Api.Services
             {
                 await Task.Delay(_holdCycle, _cts.Token);
             }
-            catch (TaskCanceledException ex)
+            catch (TaskCanceledException)
             {
-                Debug.WriteLine($"{ex} Running auger cancelled.");
+                _logger.LogTrace("Continuous auger run cancelled.");
             }
         }
 
@@ -456,7 +473,7 @@ namespace Inferno.Api.Services
         private async Task RecoveryFeed()
         {
             _blower.On();
-            Debug.WriteLine("Recovery feed: aggressive auger to rebuild the fire.");
+            _logger.LogDebug("Recovery feed: aggressive auger to rebuild the fire.");
             await RunAuger(_recoveryFeedRunTime, _recoveryFeedWaitTime);
         }
 
@@ -468,7 +485,7 @@ namespace Inferno.Api.Services
         private async Task MaintenanceFeed()
         {
             _blower.On();
-            Debug.WriteLine("Maintenance feed: lid open, sustaining the fire.");
+            _logger.LogDebug("Maintenance feed: lid open, sustaining the fire.");
             await RunAuger(_maintenanceFeedRunTime, _maintenanceFeedWaitTime);
         }
 
@@ -492,9 +509,16 @@ namespace Inferno.Api.Services
                 return;
             }
 
+            // Combustion air for the main sear path. The maintenance/recovery feeds
+            // above turn the blower on themselves; every other mode enables it before
+            // feeding, and Sear must too — otherwise a Sear entered from a cold blower
+            // (e.g. straight after Ready with a still-warm firepot) would feed the
+            // auger with no air, smoldering fuel in the tube.
+            _blower.On();
+
             if (_igniter.IsOn && !_fireMinder.IsFireStarted)
             {
-               Debug.WriteLine("Sear: Igniter is on during startup. Diverting to SMOKE mode.");
+               _logger.LogDebug("Sear: Igniter is on during startup. Diverting to Smoke mode.");
                await Smoke();
                return;
             }
@@ -502,7 +526,8 @@ namespace Inferno.Api.Services
             int establishTemp = _fireMinder.InitialIgnitionTemp + _searEstablishMargin;
             if (_rtdArray.GrillTemp < establishTemp)
             {
-                Debug.WriteLine($"Sear: Grill temp {_rtdArray.GrillTemp} below establish temp {establishTemp} (ignition {_fireMinder.InitialIgnitionTemp} + {_searEstablishMargin}). Diverting to SMOKE to establish fire.");
+                _logger.LogDebug("Sear: Grill temp {GrillTemp} below establish temp {EstablishTemp} (ignition {IgnitionTemp} + {Margin}). Diverting to Smoke to establish fire.",
+                    _rtdArray.GrillTemp, establishTemp, _fireMinder.InitialIgnitionTemp, _searEstablishMargin);
                 await Smoke();
                 return;
             }
@@ -513,7 +538,7 @@ namespace Inferno.Api.Services
             }
             else
             {
-                Debug.WriteLine($"Sear: Over max grill temp. Running minimum auger time.");
+                _logger.LogDebug("Sear: Over max grill temp. Running minimum auger time.");
                 var runTime = _holdCycle * _uMin;
                 await RunAuger(runTime, _holdCycle - runTime);
             }
@@ -529,7 +554,7 @@ namespace Inferno.Api.Services
             _igniter.Off();
             try
             {
-                if (DateTime.Now - _lastModeChange < _shutdownBlowerTimeout)
+                if (_timeProvider.GetElapsedTime(_lastModeChangeTimestamp) < _shutdownBlowerTimeout)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(1), _cts.Token);
                 }
@@ -538,9 +563,9 @@ namespace Inferno.Api.Services
                     SetMode(SmokerMode.Ready);
                 }
             }
-            catch (TaskCanceledException ex)
+            catch (TaskCanceledException)
             {
-                Debug.WriteLine($"{ex} Shutdown mode cancelled.");
+                _logger.LogTrace("Shutdown mode cancelled.");
             }
         }
 

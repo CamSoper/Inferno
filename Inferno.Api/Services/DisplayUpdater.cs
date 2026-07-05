@@ -1,7 +1,8 @@
-using System.Diagnostics;
 using Inferno.Api.Interfaces;
 using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Inferno.Api.Services
 {
@@ -9,23 +10,25 @@ namespace Inferno.Api.Services
     {
         ISmoker _smoker;
         IDisplay _display;
+        readonly ILogger<DisplayUpdater> _logger;
 
         bool _heartbeatFlag;
 
         Task _updateDisplayLoop;
         readonly CancellationTokenSource _stopCts = new();
 
-        public DisplayUpdater(ISmoker smoker, IDisplay display)
+        public DisplayUpdater(ISmoker smoker, IDisplay display, ILogger<DisplayUpdater>? logger = null)
         {
             _smoker = smoker;
             _display = display;
+            _logger = logger ?? NullLogger<DisplayUpdater>.Instance;
             _heartbeatFlag = false;
             _updateDisplayLoop = UpdateDisplayLoop();
         }
 
         private async Task UpdateDisplayLoop()
         {
-            Debug.WriteLine("Starting display thread.");
+            _logger.LogDebug("Starting display loop.");
             while (!_stopCts.IsCancellationRequested)
             {
                 try
@@ -70,7 +73,7 @@ namespace Inferno.Api.Services
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"{DateTime.Now} Display updater exception! {ex.Message}");
+                    _logger.LogError(ex, "Display updater exception. Reinitializing display.");
                     _display.Init();
                 }
             }

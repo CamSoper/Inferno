@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Inferno.Api.Interfaces;
 using System.Linq;
 using Iot.Device.Adc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Inferno.Api.Devices
 {
@@ -31,10 +33,12 @@ namespace Inferno.Api.Devices
 
         Task _adcReadTask;
         readonly CancellationTokenSource _stopCts = new();
+        readonly ILogger<RtdArray> _logger;
 
-        public RtdArray(SpiDevice spi)
+        public RtdArray(SpiDevice spi, ILogger<RtdArray>? logger = null)
         {
             _adc = new Mcp3008(spi);
+            _logger = logger ?? NullLogger<RtdArray>.Instance;
             _grillResistances = new ConcurrentQueue<double>();
             _probeResistances = new ConcurrentQueue<double>();
 
@@ -69,7 +73,7 @@ namespace Inferno.Api.Devices
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"{DateTime.Now} {ex.Message} {ex.StackTrace}");
+                    _logger.LogError(ex, "ADC read failed.");
                     try { await Task.Delay(TimeSpan.FromMilliseconds(10), _stopCts.Token); }
                     catch (OperationCanceledException) { break; }
                     continue;
