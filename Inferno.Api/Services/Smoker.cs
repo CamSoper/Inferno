@@ -52,7 +52,7 @@ namespace Inferno.Api.Services
         /// The PID determines a period of time to run the auger as a percentage of this time.
         /// Also used in Sear mode to determine how long to run the auger when the grill is too hot.
         /// </summary>
-        TimeSpan _holdCycle = TimeSpan.FromSeconds(10);
+        TimeSpan _holdCycle = TimeSpan.FromSeconds(20);
 
         // Per-mode token: cancelled by SetMode to interrupt the running mode's delay.
         // Guarded by _ctsLock so SetMode's Cancel() can never race ModeLoop's Dispose().
