@@ -36,6 +36,19 @@ namespace Inferno.Api.Pid
             _lastTemp = double.NaN;
         }
 
+        /// <summary>
+        /// Tells the controller that the caller is skipping PID updates for a while
+        /// (lid open, fire recovery, max-feed, a different mode). The accumulated
+        /// integral is kept, but the next reading re-seeds the time and temperature
+        /// state, the same way the first reading after a sensor dropout does. Without
+        /// this, the first update after the pause would see a dt covering the whole
+        /// pause and fold all of it into the integral (and the derivative).
+        /// </summary>
+        public void Pause()
+        {
+            _lastTemp = double.NaN;
+        }
+
         public double GetControlVariable(double currentTemp)
         {
             long now = _timeProvider.GetTimestamp();
@@ -55,13 +68,16 @@ namespace Inferno.Api.Pid
 
             if (double.IsNaN(_lastTemp))
             {
-                // First reading (or first after a dropout): seed state and return
-                // proportional-only. A stale/huge dt here would otherwise spike the
-                // integral and derivative.
+                // First reading (or first after a dropout or Pause()): seed state and
+                // return proportional plus the held integral (zero on the very first
+                // reading). No integral accumulation or derivative on this pass: the
+                // gap since the last update is unknown or unrepresentative, and a
+                // stale/huge dt would spike both.
                 _lastTemp = currentTemp;
                 _lastTimestamp = now;
-                _logger.LogTrace("u={U} (seed)", P);
-                return P;
+                double seedU = P + GainI() * _integral;
+                _logger.LogTrace("u={U} (seed)", seedU);
+                return seedU;
             }
 
             double dtSeconds = _timeProvider.GetElapsedTime(_lastTimestamp, now).TotalSeconds;

@@ -266,6 +266,11 @@ namespace Inferno.Api.Services
                     _cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
                 }
 
+                // The PID only runs in Hold. Any other mode is a gap in its updates,
+                // so make the next Hold pass re-seed rather than integrate across it.
+                if (_mode != SmokerMode.Hold)
+                    _pid.Pause();
+
                 try
                 {
                     switch (_mode)
@@ -339,9 +344,10 @@ namespace Inferno.Api.Services
         {
             if (_fireMinder.IsLidOpen)
             {
-                // Lid open: ride out the temp drop on a maintenance feed and leave the
-                // PID untouched (returning here freezes it — no integral windup, no
-                // overshoot when the lid closes).
+                // Lid open: ride out the temp drop on a maintenance feed. The PID
+                // doesn't run here; it's paused (by ModeLoop, or by Hold when Hold
+                // diverts here) so its next update re-seeds instead of integrating
+                // across the gap.
                 await MaintenanceFeed();
                 return;
             }
@@ -369,15 +375,19 @@ namespace Inferno.Api.Services
         {
             if (_fireMinder.IsLidOpen)
             {
-                // Lid open: ride out the temp drop on a maintenance feed and leave the
-                // PID untouched (returning here freezes it — no integral windup, no
-                // overshoot when the lid closes).
+                // Lid open: ride out the temp drop on a maintenance feed and pause the
+                // PID. Skipping the update alone isn't enough: the first update after
+                // the lid closes would integrate the error over the whole lid-open gap
+                // and overfeed. Pause() makes that update re-seed instead, keeping the
+                // integral it had before the lid opened.
+                _pid.Pause();
                 await MaintenanceFeed();
                 return;
             }
 
             if (_fireMinder.IsReigniting)
             {
+                _pid.Pause();
                 await RecoveryFeed();
                 return;
             }
@@ -387,6 +397,7 @@ namespace Inferno.Api.Services
             if (_igniter.IsOn && !_fireMinder.IsFireStarted)
             {
                _logger.LogDebug("Hold: Igniter is on during startup. Diverting to Smoke mode.");
+               _pid.Pause();
                await Smoke();
                return;
             }
@@ -394,6 +405,7 @@ namespace Inferno.Api.Services
             if (_setPoint == _maxSetPoint && _rtdArray.GrillTemp < _setPoint)
             {
                 _logger.LogDebug("Hold: Max setting. Skipping the PID, running the auger continuously.");
+                _pid.Pause();
                 await RunAuger();
                 return;
             }
@@ -496,9 +508,10 @@ namespace Inferno.Api.Services
         {
             if (_fireMinder.IsLidOpen)
             {
-                // Lid open: ride out the temp drop on a maintenance feed and leave the
-                // PID untouched (returning here freezes it — no integral windup, no
-                // overshoot when the lid closes).
+                // Lid open: ride out the temp drop on a maintenance feed. The PID
+                // doesn't run here; it's paused (by ModeLoop, or by Hold when Hold
+                // diverts here) so its next update re-seeds instead of integrating
+                // across the gap.
                 await MaintenanceFeed();
                 return;
             }
