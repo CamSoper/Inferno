@@ -1,4 +1,5 @@
 using Inferno.Api.Pid;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Inferno.Tests;
 
@@ -89,5 +90,71 @@ public class SmokerPidTests
         var pid = new SmokerPid(60.0, 180.0, 45.0);
         pid.SetPoint = 300;
         Assert.Equal(300, pid.SetPoint);
+    }
+
+    // Gains for PB=60, Ti=180: Kp = -1/60, Ki = Kp/180.
+    const double Kp = -1.0 / 60.0;
+    const double Ki = Kp / 180.0;
+    static readonly TimeSpan HoldInterval = TimeSpan.FromSeconds(20);
+
+    [Fact]
+    public void Pause_LongLidOpenGap_FirstUpdateAfterResumeDoesNotIntegrateTheGap()
+    {
+        var clock = new FakeTimeProvider();
+        var pid = new SmokerPid(60.0, 180.0, 45.0, clock);
+        pid.SetPoint = 225;
+
+        // Steady at 215 (10 below setpoint) for a few normal Hold intervals. A
+        // constant temp keeps the derivative at zero, so u - P is exactly the
+        // integral term.
+        pid.GetControlVariable(215); // seed
+        double uBefore = 0;
+        for (int i = 0; i < 5; i++)
+        {
+            clock.Advance(HoldInterval);
+            uBefore = pid.GetControlVariable(215);
+        }
+        double iBefore = uBefore - Kp * (215 - 225);
+        Assert.True(iBefore > 0, $"Expected a positive integral term below setpoint, got {iBefore}");
+
+        // Lid opens: Hold stops calling the PID for the full LidMonitor latch.
+        pid.Pause();
+        clock.Advance(TimeSpan.FromSeconds(180));
+
+        // Lid closes, temp has recovered to within the recover band (20 below).
+        double uFirst = pid.GetControlVariable(205);
+        double iFirst = uFirst - Kp * (205 - 225);
+
+        // Without the fix this pass integrates -20F over the 180s gap: an integral
+        // jump of Ki * -20 * 180 = +0.33 duty on top of the normal output.
+        Assert.Equal(iBefore, iFirst, 9);
+
+        // The next normal pass integrates exactly one interval, not the gap.
+        clock.Advance(HoldInterval);
+        double uSecond = pid.GetControlVariable(205);
+        double iSecond = uSecond - Kp * (205 - 225);
+        double oneInterval = Ki * (205 - 225) * HoldInterval.TotalSeconds;
+        Assert.Equal(iBefore + oneInterval, iSecond, 9);
+    }
+
+    [Fact]
+    public void Pause_KeepsIntegralAcrossReseed()
+    {
+        var clock = new FakeTimeProvider();
+        var pid = new SmokerPid(60.0, 180.0, 45.0, clock);
+        pid.SetPoint = 225;
+
+        pid.GetControlVariable(225); // seed at setpoint: P = 0
+        clock.Advance(HoldInterval);
+        double u = pid.GetControlVariable(215);
+        Assert.True(u > 0);
+
+        pid.Pause();
+        clock.Advance(TimeSpan.FromMinutes(10));
+
+        // Back at setpoint after the pause: P = 0, no derivative on the seed pass,
+        // so the output is just the integral held from before the pause.
+        double heldIntegral = Ki * (215 - 225) * HoldInterval.TotalSeconds;
+        Assert.Equal(heldIntegral, pid.GetControlVariable(225), 9);
     }
 }
