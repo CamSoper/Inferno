@@ -511,10 +511,6 @@ namespace Inferno.Mqtt.Services
 
             bool lastUndervoltage = first.UndervoltageNow == true;
             bool lastThrottled = first.ThrottledNow == true;
-            if (lastUndervoltage)
-            {
-                await AlertAsync("undervoltage", "Undervoltage at startup", first);
-            }
 
             var lastDiag = DateTimeOffset.Now;
             DateTimeOffset? apiDownSince = null;
@@ -531,8 +527,9 @@ namespace Inferno.Mqtt.Services
                     apiDownSince = IsApiOk ? null : apiDownSince ?? now;
 
                     // Throttle flags are cheap to read, so poll them fast. Undervoltage
-                    // typically shows up minutes before a brownout reboot: that's the
-                    // window to get a snapshot out.
+                    // typically shows up minutes before a brownout reboot, so an edge
+                    // pushes a fresh snapshot right away. It's a signal for HA history,
+                    // not an alert: a marginal PSU dips often without being an emergency.
                     var throttle = _health.ReadThrottle();
                     bool uvNow = throttle?.UndervoltageNow == true;
                     bool thrNow = throttle?.ThrottledNow == true;
@@ -544,10 +541,6 @@ namespace Inferno.Mqtt.Services
                         await PublishDiagAsync(snapshot);
                         lastDiag = now;
 
-                        if (uvNow && !lastUndervoltage)
-                        {
-                            await AlertAsync("undervoltage", "Supply voltage dropped below 4.63V", snapshot);
-                        }
                         if (thrNow && !lastThrottled)
                         {
                             await AlertAsync("throttled", "Firmware is throttling the CPU", snapshot);
