@@ -1,4 +1,4 @@
-using Inferno.Api.Interfaces;
+﻿using Inferno.Api.Interfaces;
 using Inferno.Common.Interfaces;
 using Inferno.Common.Models;
 using Inferno.Api.Pid;
@@ -15,6 +15,7 @@ namespace Inferno.Api.Services
         IRelayDevice _igniter;
         IRtdArray _rtdArray;
         IDisplay _display;
+        volatile PidState? _lastPid;
         readonly ILogger<Smoker> _logger;
         // Monotonic clock for durations (shutdown cooldown), plus wall time for the
         // status timestamps. Injected so a Pi's NTP step can't corrupt elapsed-time
@@ -179,7 +180,8 @@ namespace Inferno.Api.Services
                     SetPoint = _setPoint,
                     PValue = _pValue,
                     ModeTime = _lastModeChange,
-                    CurrentTime = _timeProvider.GetLocalNow().DateTime
+                    CurrentTime = _timeProvider.GetLocalNow().DateTime,
+                    Pid = _mode == SmokerMode.Hold ? _lastPid : null,
                 };
             }
         }
@@ -194,6 +196,9 @@ namespace Inferno.Api.Services
             {
                 return true;
             }
+
+            // A new mode starts a fresh PID record; don't report the last hold's terms.
+            _lastPid = null;
 
             if (newMode == SmokerMode.Ready &&
                 currentMode.IsCookingMode())
@@ -416,12 +421,27 @@ namespace Inferno.Api.Services
                 _pid.SetPoint = _setPoint;
             }
 
-            double u = _pid.GetControlVariable(_rtdArray.GrillTemp).Clamp(_uMin, _uMax);
+            double grillTemp = _rtdArray.GrillTemp;
+            double u = _pid.GetControlVariable(grillTemp).Clamp(_uMin, _uMax);
             if(double.IsNaN(u))
             {
                 _logger.LogWarning("Hold: PID returned NaN. Falling back to minimum duty {UMin}.", _uMin);
                 u = _uMin;
             }
+
+            var terms = _pid.LastTerms;
+            _lastPid = new PidState
+            {
+                Timestamp = _timeProvider.GetLocalNow().DateTime,
+                SetPoint = _pid.SetPoint,
+                GrillTemp = grillTemp,
+                Error = terms.Error,
+                P = terms.P,
+                I = terms.I,
+                D = terms.D,
+                U = terms.U,
+                Duty = u,
+            };
             
             TimeSpan runTime = u * _holdCycle;
             if (runTime == _holdCycle)
