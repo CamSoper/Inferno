@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace Inferno.Common.Models
 {
@@ -15,5 +15,7 @@ namespace Inferno.Common.Models
         public int PValue { get; set; }
         public DateTime ModeTime { get; set; }
         public DateTime CurrentTime { get; set; }
+        /// <summary>Last PID decision while in Hold; null outside a PID-driven hold.</summary>
+        public PidState? Pid { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Inferno.Common.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -23,6 +23,9 @@ namespace Inferno.Api.Pid
         double _lastTemp;
 
         public double SetPoint { get; set; }
+
+        /// <summary>Terms from the most recent GetControlVariable call (NaN-free; zeros on a dropout).</summary>
+        public (double Error, double P, double I, double D, double U) LastTerms { get; private set; }
         public SmokerPid(double PB, double Ti, double Td, TimeProvider? timeProvider = null, ILogger<SmokerPid>? logger = null)
         {
             _PB = PB;
@@ -60,6 +63,7 @@ namespace Inferno.Api.Pid
                 // across the gap.
                 _lastTimestamp = now;
                 _lastTemp = double.NaN;
+                LastTerms = (0, 0, 0, 0, 0);
                 return 0;
             }
 
@@ -75,7 +79,9 @@ namespace Inferno.Api.Pid
                 // stale/huge dt would spike both.
                 _lastTemp = currentTemp;
                 _lastTimestamp = now;
-                double seedU = P + GainI() * _integral;
+                double seedI = GainI() * _integral;
+                double seedU = P + seedI;
+                LastTerms = (error, P, seedI, 0, seedU);
                 _logger.LogTrace("u={U} (seed)", seedU);
                 return seedU;
             }
@@ -101,6 +107,7 @@ namespace Inferno.Api.Pid
             }
 
             double u = P + I + D;
+            LastTerms = (error, P, I, D, u);
             _logger.LogTrace("u={U} ({P}+{I}+{D})", u, P, I, D);
 
             _lastTemp = currentTemp;

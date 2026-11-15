@@ -32,6 +32,7 @@ namespace Inferno.Mqtt.Services
         internal const string TOPIC_API_AVAILABILITY = "inferno/api/availability";
         internal const string TOPIC_DIAG = "inferno/diag/state";
         internal const string TOPIC_ALERT = "inferno/alert";
+        internal const string TOPIC_PID = "inferno/pid/state";
         private const string ONLINE = "online";
         private const string OFFLINE = "offline";
 
@@ -63,6 +64,7 @@ namespace Inferno.Mqtt.Services
         private Task _healthLoop = null!;
         private readonly CancellationTokenSource _stopCts = new();
         private DateTimeOffset? _lastApiSuccess;
+        private DateTime? _lastPidTimestamp;
         private bool? _apiAvailablePublished;
         private readonly Dictionary<string, DateTimeOffset> _lastAlert = new();
 
@@ -310,6 +312,32 @@ namespace Inferno.Mqtt.Services
                 ["unique_id"] = "inferno_p_value",
             });
 
+            // PID tuning telemetry (published once per Hold cycle)
+            await PublishDiscoveryConfigAsync("sensor", "auger_duty", new Dictionary<string, object>
+            {
+                ["name"] = "Auger Duty",
+                ["state_topic"] = TOPIC_PID,
+                ["value_template"] = "{{ value_json.duty_pct }}",
+                ["unit_of_measurement"] = "%",
+                ["state_class"] = "measurement",
+                ["icon"] = "mdi:screw-lag",
+                ["json_attributes_topic"] = TOPIC_PID,
+                ["device"] = device,
+                ["unique_id"] = "inferno_auger_duty",
+            });
+
+            await PublishDiscoveryConfigAsync("sensor", "pid_error", new Dictionary<string, object>
+            {
+                ["name"] = "PID Error",
+                ["state_topic"] = TOPIC_PID,
+                ["value_template"] = "{{ value_json.error }}",
+                ["unit_of_measurement"] = "°F",
+                ["state_class"] = "measurement",
+                ["icon"] = "mdi:delta",
+                ["device"] = device,
+                ["unique_id"] = "inferno_pid_error",
+            });
+
             Console.WriteLine($"{DateTime.Now} HA MQTT discovery configs published");
         }
 
@@ -394,6 +422,7 @@ namespace Inferno.Mqtt.Services
                 {
                     var status = await _proxy.GetStatusAsync();
                     _lastApiSuccess = DateTimeOffset.Now;
+                    await PublishPidAsync(status.Pid);
                     if (stateErrors > 0)
                     {
                         Console.WriteLine($"{DateTime.Now} StateLoop recovered after {stateErrors} failed polls");
@@ -588,6 +617,33 @@ namespace Inferno.Mqtt.Services
                 await PublishAsync(TOPIC_API_AVAILABILITY, ok ? ONLINE : OFFLINE, retain: true);
                 _apiAvailablePublished = ok;
             }
+        }
+
+        /// <summary>
+        /// One message per Hold cycle with the controller's decision, so HA history
+        /// holds setpoint, temp and what the PID did about it -- enough to tune from.
+        /// </summary>
+        private async Task PublishPidAsync(PidState? pid)
+        {
+            if (pid is null || pid.Timestamp == _lastPidTimestamp)
+            {
+                return;
+            }
+            _lastPidTimestamp = pid.Timestamp;
+
+            var payload = JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["ts"] = pid.Timestamp,
+                ["setpoint"] = pid.SetPoint,
+                ["grill"] = Math.Round(pid.GrillTemp, 1),
+                ["error"] = Math.Round(pid.Error, 1),
+                ["p"] = Math.Round(pid.P, 4),
+                ["i"] = Math.Round(pid.I, 4),
+                ["d"] = Math.Round(pid.D, 4),
+                ["u"] = Math.Round(pid.U, 4),
+                ["duty_pct"] = Math.Round(pid.Duty * 100, 1),
+            });
+            await PublishAsync(TOPIC_PID, payload, retain: true);
         }
 
         private Task PublishDiagAsync(HealthSnapshot snapshot) =>

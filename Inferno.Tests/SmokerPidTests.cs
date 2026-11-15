@@ -1,10 +1,36 @@
-using Inferno.Api.Pid;
+﻿using Inferno.Api.Pid;
 using Microsoft.Extensions.Time.Testing;
 
 namespace Inferno.Tests;
 
 public class SmokerPidTests
 {
+    [Fact]
+    public void LastTerms_SumToReturnedU()
+    {
+        var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider();
+        var pid = new SmokerPid(60.0, 180.0, 45.0, time);
+        pid.SetPoint = 225;
+
+        pid.GetControlVariable(200);
+        time.Advance(TimeSpan.FromSeconds(10));
+        double u = pid.GetControlVariable(205);
+
+        var t = pid.LastTerms;
+        Assert.Equal(-20, t.Error, 6);
+        Assert.Equal(u, t.U, 9);
+        Assert.Equal(u, t.P + t.I + t.D, 9);
+        Assert.True(t.P > 0);
+    }
+
+    [Fact]
+    public void LastTerms_ZeroOnDropout()
+    {
+        var pid = new SmokerPid(60.0, 180.0, 45.0) { SetPoint = 225 };
+        pid.GetControlVariable(double.NaN);
+        Assert.Equal((0.0, 0.0, 0.0, 0.0, 0.0), pid.LastTerms);
+    }
+
     [Fact]
     public void GetControlVariable_BelowSetPoint_ReturnsPositive()
     {
