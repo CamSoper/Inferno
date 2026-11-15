@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Serialization;
 
@@ -30,6 +30,7 @@ namespace Inferno.Mqtt.Services
         [JsonPropertyName("throttled_raw")] public string? ThrottledRaw { get; init; }
         [JsonPropertyName("undervoltage_now")] public bool? UndervoltageNow { get; init; }
         [JsonPropertyName("undervoltage_since_boot")] public bool? UndervoltageSinceBoot { get; init; }
+        [JsonPropertyName("undervoltage_pct_10m")] public double? UndervoltagePct10m { get; init; }
         [JsonPropertyName("throttled_now")] public bool? ThrottledNow { get; init; }
         [JsonPropertyName("throttled_since_boot")] public bool? ThrottledSinceBoot { get; init; }
         [JsonPropertyName("cpu_temp_c")] public double? CpuTempC { get; init; }
@@ -68,7 +69,7 @@ namespace Inferno.Mqtt.Services
             return output is null ? null : ParseThrottled(output);
         }
 
-        public HealthSnapshot Collect(ThrottleState? throttle = null)
+        public HealthSnapshot Collect(ThrottleState? throttle = null, double? undervoltagePct = null)
         {
             throttle ??= ReadThrottle();
             var uptime = ReadUptimeSeconds();
@@ -93,6 +94,7 @@ namespace Inferno.Mqtt.Services
                 ThrottledRaw = throttle is null ? null : $"0x{throttle.Raw:x}",
                 UndervoltageNow = throttle?.UndervoltageNow,
                 UndervoltageSinceBoot = throttle?.UndervoltageSinceBoot,
+                UndervoltagePct10m = undervoltagePct,
                 ThrottledNow = throttle?.ThrottledNow,
                 ThrottledSinceBoot = throttle?.ThrottledSinceBoot,
                 CpuTempC = ReadCpuTempC(),

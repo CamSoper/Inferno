@@ -38,6 +38,12 @@ namespace Inferno.Mqtt.Services
         private static readonly TimeSpan ThrottlePollInterval = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan DiagPublishInterval = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan ApiDownAlertAfter = TimeSpan.FromSeconds(60);
+
+        // Alert only on *sustained* undervoltage: more than this share of samples
+        // undervolted across the window. Override with INFERNO_UV_ALERT_PCT.
+        private static readonly TimeSpan UndervoltageWindow = TimeSpan.FromMinutes(10);
+        private static readonly double UndervoltageAlertPct =
+            double.TryParse(Environment.GetEnvironmentVariable("INFERNO_UV_ALERT_PCT"), out var pct) ? pct : 50;
         private static readonly TimeSpan AlertCooldown = TimeSpan.FromMinutes(5);
 
 
@@ -509,6 +515,7 @@ namespace Inferno.Mqtt.Services
                 await AlertAsync("self_test_failed", string.Join("; ", first.SelfTestFailures), first);
             }
 
+            var uvTracker = new UndervoltageTracker(UndervoltageWindow);
             bool lastUndervoltage = first.UndervoltageNow == true;
             bool lastThrottled = first.ThrottledNow == true;
 
@@ -532,18 +539,26 @@ namespace Inferno.Mqtt.Services
                     // not an alert: a marginal PSU dips often without being an emergency.
                     var throttle = _health.ReadThrottle();
                     bool uvNow = throttle?.UndervoltageNow == true;
+                    if (throttle is not null) uvTracker.Add(now, uvNow);
                     bool thrNow = throttle?.ThrottledNow == true;
                     bool edge = (uvNow && !lastUndervoltage) || (thrNow && !lastThrottled);
 
                     if (edge || now - lastDiag >= DiagPublishInterval)
                     {
-                        var snapshot = _health.Collect(throttle);
+                        var snapshot = _health.Collect(throttle, uvTracker.Percent);
                         await PublishDiagAsync(snapshot);
                         lastDiag = now;
 
                         if (thrNow && !lastThrottled)
                         {
                             await AlertAsync("throttled", "Firmware is throttling the CPU", snapshot);
+                        }
+                        if (uvTracker.WindowFull(now) && uvTracker.Percent >= UndervoltageAlertPct)
+                        {
+                            await AlertAsync("power_degraded",
+                                $"Undervolted {uvTracker.Percent}% of the last {UndervoltageWindow.TotalMinutes:0} minutes (threshold {UndervoltageAlertPct}%)",
+                                snapshot,
+                                cooldown: TimeSpan.FromHours(1));
                         }
                         if (apiDownSince is { } since && now - since >= ApiDownAlertAfter)
                         {
@@ -582,10 +597,10 @@ namespace Inferno.Mqtt.Services
         /// Publishes a non-retained alert with the current snapshot attached, at most
         /// once per <see cref="AlertCooldown"/> per kind so a flapping PSU can't spam.
         /// </summary>
-        private async Task AlertAsync(string kind, string message, HealthSnapshot snapshot)
+        private async Task AlertAsync(string kind, string message, HealthSnapshot snapshot, TimeSpan? cooldown = null)
         {
             var now = DateTimeOffset.Now;
-            if (_lastAlert.TryGetValue(kind, out var last) && now - last < AlertCooldown)
+            if (_lastAlert.TryGetValue(kind, out var last) && now - last < (cooldown ?? AlertCooldown))
             {
                 return;
             }
@@ -668,6 +683,10 @@ namespace Inferno.Mqtt.Services
 
             await PublishDiscoveryConfigAsync("binary_sensor", "undervoltage", Diag("Undervoltage", "inferno_undervoltage",
                 Bool("undervoltage_now"), new() { ["device_class"] = "problem" }), needsApi: false);
+
+            await PublishDiscoveryConfigAsync("sensor", "undervoltage_pct", Diag("Undervoltage (10 min)", "inferno_undervoltage_pct",
+                "{{ value_json.undervoltage_pct_10m }}",
+                new() { ["unit_of_measurement"] = "%", ["state_class"] = "measurement", ["icon"] = "mdi:flash-triangle" }), needsApi: false);
 
             await PublishDiscoveryConfigAsync("binary_sensor", "undervoltage_since_boot", Diag("Undervoltage Since Boot", "inferno_undervoltage_since_boot",
                 Bool("undervoltage_since_boot"), new() { ["device_class"] = "problem" }), needsApi: false);
