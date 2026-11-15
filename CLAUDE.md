@@ -35,6 +35,7 @@ Six projects in `Inferno.sln`:
 - **Inferno.Cli** — Command-line client for controlling the smoker remotely via HTTP.
 - **Inferno.Common** — Shared models (`SmokerMode`, `SmokerStatus`, `Temps`), interfaces (`ISmoker`), and `SmokerProxy` HTTP client.
 - **Inferno.Mqtt** — MQTT bridge service that exposes smoker state to Home Assistant. Subscribes/publishes on `inferno/{topic}/{command|state}` topics.
+  Also ships Pi telemetry (`Services/HealthMonitor.cs`): MQTT last will on `inferno/availability`, API health on `inferno/api/availability`, a retained JSON snapshot on `inferno/diag/state` every 30s (throttle/undervoltage flags, CPU temp, load, memory, disk, Wi-Fi dBm, boot time, SPI/I2C presence, boot-config and FSCK checks), and non-retained `inferno/alert` events (`undervoltage`, `throttled`, `self_test_failed`, `api_down`) carrying the snapshot. All of it is exposed to HA as diagnostic entities via discovery.
 - **Inferno.Deploy** — Pulumi infrastructure-as-code project for deploying to the Pi.
 - **Inferno.Tests** — xUnit test project covering PID, RTD, FireMinder, PreheatMonitor, and extensions.
 

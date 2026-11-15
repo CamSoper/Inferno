@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Inferno.Api\Inferno.Api.csproj" />
     <ProjectReference Include="..\Inferno.Common\Inferno.Common.csproj" />
+    <ProjectReference Include="..\Inferno.Mqtt\Inferno.Mqtt.csproj" />
   </ItemGroup>
 
 </Project>

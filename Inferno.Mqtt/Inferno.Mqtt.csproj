@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Inferno.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Inferno.Common\Inferno.Common.csproj" />

@@ -1,4 +1,4 @@
-// HOST PREREQUISITE: the deploy user (pi) must have passwordless sudo, because
+﻿// HOST PREREQUISITE: the deploy user (pi) must have passwordless sudo, because
 // setup-services / restart-* run `sudo` over a non-interactive SSH session (no
 // TTY to type a password into). On a fresh Pi, set it up once:
 //
@@ -123,6 +123,21 @@ return await Deployment.RunAsync(() =>
             "echo 'i2c/spi enabled -- REBOOT REQUIRED for device nodes to appear'; " +
             "else echo 'i2c/spi enabled and device nodes present'; fi",
         Triggers = new[] { targetId },
+    }, new CustomResourceOptions { DependsOn = { configureSshEnv } });
+
+    // Step 0c: Keep the journal across reboots, capped so it can't eat the SD card.
+    // Without this the logs live in /run and every brownout reboot wipes the
+    // evidence of what happened right before it.
+    const string journaldConf = "[Journal]\nStorage=persistent\nSystemMaxUse=64M\nSystemKeepFree=1G\nMaxRetentionSec=1month\n";
+    var persistentJournal = new RemoteCommand("persistent-journal", new Pulumi.Command.Remote.CommandArgs
+    {
+        Connection = conn,
+        Create =
+            "sudo mkdir -p /etc/systemd/journald.conf.d /var/log/journal && " +
+            $"printf '{journaldConf}' | sudo tee /etc/systemd/journald.conf.d/50-inferno.conf > /dev/null && " +
+            "sudo systemd-tmpfiles --create --prefix /var/log/journal && " +
+            "sudo systemctl restart systemd-journald && sudo journalctl --flush && echo 'journald persistent'",
+        Triggers = new[] { targetId, journaldConf },
     }, new CustomResourceOptions { DependsOn = { configureSshEnv } });
 
     // Resolve ~ to absolute path (CopyToRemote and systemd don't expand ~)
