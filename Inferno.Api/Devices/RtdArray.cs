@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Device.Spi;
 using System.Diagnostics;
@@ -57,6 +57,7 @@ namespace Inferno.Api.Devices
 
         private async Task ReadAdc()
         {
+            int adcFailures = 0;
             while (!_stopCts.IsCancellationRequested)
             {
                 int grillValue;
@@ -73,10 +74,27 @@ namespace Inferno.Api.Devices
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "ADC read failed.");
-                    try { await Task.Delay(TimeSpan.FromMilliseconds(10), _stopCts.Token); }
+                    // A missing SPI device fails every read. Logging each one at 100Hz
+                    // pegged the CPU and journald, which sagged the supply rail further.
+                    // Log the first failure in full, then a one-line summary a minute,
+                    // and back off to 1s between retries while failing.
+                    if (adcFailures++ == 0)
+                    {
+                        _logger.LogError(ex, "ADC read failed.");
+                    }
+                    else if (adcFailures % 60 == 0)
+                    {
+                        _logger.LogError("ADC still failing ({Count} attempts): {Message}", adcFailures, ex.Message);
+                    }
+                    try { await Task.Delay(TimeSpan.FromSeconds(1), _stopCts.Token); }
                     catch (OperationCanceledException) { break; }
                     continue;
+                }
+
+                if (adcFailures > 0)
+                {
+                    _logger.LogWarning("ADC recovered after {Count} failed attempts.", adcFailures);
+                    adcFailures = 0;
                 }
 
                 EnqueueIfValid(_grillResistances, grillValue, "Grill", ref _grillInvalidCount);

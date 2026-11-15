@@ -1,4 +1,4 @@
-using System.Device.Gpio;
+﻿using System.Device.Gpio;
 using System.Device.Gpio.Drivers;
 using System.Device.Spi;
 using Inferno.Api.Services;
@@ -33,7 +33,7 @@ builder.Services.AddSingleton<ISmoker>(sp =>
                       new Blower(_gpio, 21),
                       new Igniter(_gpio, 23),
                       new RtdArray(_spi, loggerFactory.CreateLogger<RtdArray>()),
-                      new Display(),
+                      new Display(loggerFactory.CreateLogger<Display>()),
                       loggerFactory,
                       timeProvider);
 });
