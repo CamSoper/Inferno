@@ -7,7 +7,7 @@ Wood pellet smoker powered by .NET 8 and Raspberry Pi 3.
 
 ## How it feeds the fire
 
-[![Animated explainer: how Inferno feeds the fire](docs/media/how-inferno-feeds-the-fire.jpg)](docs/media/how-inferno-feeds-the-fire.mp4)
+[![Animated explainer: how Inferno feeds the fire](docs/media/how-inferno-feeds-the-fire.jpg)](https://github.com/CamSoper/Inferno/raw/main/docs/media/how-inferno-feeds-the-fire.mp4)
 
 A 2½-minute animated explainer (click the image to watch). It covers how the auger feeds pellets to the fire, the factory Traeger controller's fixed on/off cycles, and the PID loop Inferno uses in Hold mode.
 
