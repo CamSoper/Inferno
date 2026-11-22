@@ -46,7 +46,7 @@ Six projects in `Inferno.sln`:
 - **Smoker.cs** — Main state machine. Controls auger feed cycles, blower, igniter. In Hold mode, uses PID output to modulate auger duty cycle.
 - **FireMinder.cs** — Background fire health monitor with auto-reignition and timeout detection.
 - **PreheatMonitor.cs** — Stability-based preheat detection using a rolling temperature window with latch behavior.
-- **SmokerPid.cs** — PID controller (PB=60, Ti=180, Td=45) with integral windup protection. Returns duty cycle for 10-second hold cycles.
+- **SmokerPid.cs** — PID controller (PB=60, Ti=180, Td=45) with integral windup protection. Returns the control variable, which `Smoker.cs` clamps to a 17.5-100% duty of a 20-second hold cycle.
 - **DisplayUpdater.cs** — Refreshes the LCD every second with mode, temps, and hardware status.
 
 ### Hardware Layer (Inferno.Api/Devices/)
