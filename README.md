@@ -5,6 +5,12 @@ Wood pellet smoker powered by .NET 8 and Raspberry Pi 3.
 * See it [featured on an episode of On .NET](https://www.youtube.com/watch?v=4kJGRuXZ4kg)! This is a short overview and discussion.
 * See me [demo the smoker on the stream I co-host, The DotNet Docs](https://www.youtube.com/watch?v=Ps3bHwY8dSg)! This is a more in-depth review of some of the code along with a live demo.
 
+## How it feeds the fire
+
+[![Animated explainer: how Inferno feeds the fire](docs/media/how-inferno-feeds-the-fire.jpg)](docs/media/how-inferno-feeds-the-fire.mp4)
+
+A 2½-minute animated explainer (click the image to watch). It covers how the auger feeds pellets to the fire, the factory Traeger controller's fixed on/off cycles, and the PID loop Inferno uses in Hold mode.
+
 ## Inferno.Api
 
 This is the core functionality. It exposes all functionality as a web API. I run it on http://localhost:5000 and control it via a variety of tools. The PID algorithm, fire minder, and display logic all reside here.
